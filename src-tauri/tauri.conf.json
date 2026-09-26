@@ -20,7 +20,9 @@
         "resizable": false,
         "maximizable": false,
         "fullscreen": false,
-        "center": true
+        "center": true,
+        "titleBarStyle": "Transparent",
+        "backgroundColor": "#050510"
       }
     ],
     "security": {
