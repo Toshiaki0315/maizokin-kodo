@@ -1440,6 +1440,20 @@ npm run tauri dev
 | `npm run coverage` | テストを実行し、`coverage/` にレポートを出力 |
 | `npm run tauri build` | リリースビルド。dmg は `src-tauri/target/release/bundle/dmg/` に出力される |
 
+同じ操作はリポジトリ直下の `Makefile` からも実行できます（`make` だけで一覧を表示）。
+
+| コマンド | 内容 |
+| --- | --- |
+| `make install` | 依存パッケージを入れる（`package-lock.json` が変わったときだけ `npm install`） |
+| `make dev` | 開発用に起動（`npm run tauri dev`） |
+| `make test` / `make coverage` | 単体テスト／カバレッジ |
+| `make app` | テストを通したうえで、アプリ（`.app`）を `src-tauri/target/release/bundle/macos/` に作る |
+| `make dmg` | テストを通したうえで、dmg を `src-tauri/target/release/bundle/dmg/` に作る |
+| `make icon` | 原本の SVG からアイコン一式を作り直す（16.11） |
+| `make clean` | `dist`・`coverage`・作ったアプリと dmg を消す |
+
+新しい Xcode の `strip` は手続きマクロのライブラリを読み込めなくするため、`src-tauri/Cargo.toml` の `[profile.release.build-override]` で、ビルドの途中で使う部品には strip をかけない（アプリ本体には strip をかける）。
+
 対象 CPU は Apple Silicon のみのため、ユニバーサルバイナリや Intel 向けのビルドは作りません（16.8）。
 
 ### 17.5 リポジトリ構成
@@ -1467,6 +1481,7 @@ maizokin-kodo/
 ├─ LICENSE          MIT License
 ├─ README.md        概要、遊び方、ビルド手順、Gatekeeper の許可手順
 ├─ index.html
+├─ Makefile         make app・make dmg などのコマンド（17.4）
 ├─ package.json
 └─ vite.config.ts
 ```

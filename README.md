@@ -34,11 +34,17 @@
 
 仕様と開発手順は [docs/spec.md](docs/spec.md) にまとめています。環境構築は17章を参照してください。
 
+よく使う操作は `make` で実行できます（`make` だけを実行すると一覧が出ます）。
+
 ```bash
-npm install
-npm run tauri dev   # 開発モードで起動
-npm test            # 単体テスト
+make install   # 依存パッケージを入れる
+make dev       # 開発モードで起動
+make test      # 単体テスト
+make app       # アプリ（.app）を作る
+make dmg       # インストール用の dmg を作る
 ```
+
+できあがったアプリは `src-tauri/target/release/bundle/macos/`、dmg は `src-tauri/target/release/bundle/dmg/` に出力されます。
 
 ## ライセンス
 

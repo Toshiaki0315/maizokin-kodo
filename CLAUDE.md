@@ -41,6 +41,7 @@
 | `npm run coverage` | テスト＋カバレッジ＋未達の警告（目標 90%、未達でも失敗にしない） |
 | `npm run tauri dev` | アプリを開発モードで起動 |
 | `npm run tauri build` | dmg を作成 |
+| `make app` / `make dmg` | テストを通したうえでアプリ／dmg を作成（`make` で一覧） |
 
 Vitest のカバレッジ設定：対象は `src/core/**`、reporter は `['text', 'html', 'json-summary']`、`thresholds` は設定しない。
 

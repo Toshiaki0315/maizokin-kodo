@@ -31,3 +31,9 @@ lto = true
 opt-level = 3
 panic = "abort"
 strip = true
+
+# 手続きマクロなど、ビルドの途中で使う部品には strip をかけない。
+# 新しい Xcode の strip では手続きマクロのライブラリが読み込めなくなり（can't find crate）、リリースビルドが失敗するため。
+# アプリ本体には上の strip = true がそのまま効く
+[profile.release.build-override]
+strip = false
