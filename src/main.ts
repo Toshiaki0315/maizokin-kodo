@@ -5,6 +5,7 @@ import { Game, parseHiScore, type GameEvent } from './core/game';
 import { Input, toGameKey } from './core/input';
 import { FixedStepLoop } from './core/loop';
 import { createRng } from './core/rng';
+import { Sound } from './audio';
 import * as platform from './platform';
 import { GameRenderer } from './render/renderer';
 
@@ -14,7 +15,11 @@ async function main(): Promise<void> {
   if (import.meta.env.DEV) console.info(`乱数のシード: ${seed}`);
 
   // ハイスコアは START 画面を出す前に読み込む（16.10）
-  const [storedHiScore, storedCrt] = await Promise.all([platform.loadHiScore(), platform.loadCrtEnabled()]);
+  const [storedHiScore, storedCrt, storedSound] = await Promise.all([
+    platform.loadHiScore(),
+    platform.loadCrtEnabled(),
+    platform.loadSoundEnabled(),
+  ]);
   const game = new Game(createRng(seed), parseHiScore(storedHiScore));
   const input = new Input();
   const loop = new FixedStepLoop();
@@ -42,9 +47,15 @@ async function main(): Promise<void> {
     crtEnabled,
   });
   reducedMotion.addEventListener('change', (e) => renderer.setReducedMotion(e.matches));
+
+  // 効果音と BGM（16.18）
+  let soundEnabled = storedSound;
+  const sound = new Sound(soundEnabled);
   app.stage.addChild(renderer.view);
 
   window.addEventListener('keydown', (e) => {
+    // WebView はユーザーが操作するまで音を出させないので、キー入力のたびに解除を試みる
+    sound.unlock();
     const key = toGameKey(e.code);
     if (key === null) return;
     e.preventDefault();
@@ -81,6 +92,7 @@ async function main(): Promise<void> {
         break;
       default:
         renderer.handleEvent(event);
+        sound.handleEvent(event);
         break;
     }
   };
@@ -100,6 +112,13 @@ async function main(): Promise<void> {
       renderer.setCrtEnabled(crtEnabled);
       void platform.saveCrtEnabled(crtEnabled);
     }
+    // M キー（音のオン・オフ）も、ゲームの状態に関係なくフレームごとに受け取る（16.18）
+    if (input.takeMuteToggle()) {
+      soundEnabled = !soundEnabled;
+      sound.setEnabled(soundEnabled);
+      void platform.saveSoundEnabled(soundEnabled);
+    }
+    sound.updateMusic(game.state);
     renderer.render(game, nowMs, frameMs);
   });
 }

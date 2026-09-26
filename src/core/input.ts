@@ -22,7 +22,7 @@ export interface InputSnapshot {
 }
 
 /** ゲームで使うキー */
-export type GameKey = Dir | 'DIG' | 'FILL' | 'ENTER' | 'PAUSE' | 'ESCAPE' | 'CRT';
+export type GameKey = Dir | 'DIG' | 'FILL' | 'ENTER' | 'PAUSE' | 'ESCAPE' | 'CRT' | 'MUTE';
 
 // 文字ではなく物理キー（KeyboardEvent.code）で判定する。
 // Shift や Caps Lock に左右されず「大文字小文字不問」（5.1）を満たし、日本語入力がオンでも反応するため
@@ -38,6 +38,7 @@ const KEY_BY_CODE: Readonly<Record<string, GameKey>> = {
   KeyP: 'PAUSE',
   Escape: 'ESCAPE',
   KeyF: 'CRT',
+  KeyM: 'MUTE',
 };
 
 /** KeyboardEvent.code をゲームのキーに変換する。割り当てのないキーは null */
@@ -63,6 +64,7 @@ export class Input {
   /** まだスナップショットに載せていない押下エッジ（14.5：ステップが0回なら持ち越す） */
   private readonly pendingEdges = new Set<EdgeKey>();
   private pendingCrtToggle = false;
+  private pendingMuteToggle = false;
 
   keyDown(key: GameKey): void {
     // 押したままの keydown（キーリピート）はエッジにしない（13.1 #10）
@@ -72,6 +74,8 @@ export class Input {
       this.pendingEdges.add(key);
     } else if (key === 'CRT') {
       this.pendingCrtToggle = true;
+    } else if (key === 'MUTE') {
+      this.pendingMuteToggle = true;
     }
   }
 
@@ -103,9 +107,16 @@ export class Input {
     return toggled;
   }
 
+  /** M キー（音のオン・オフ）の押下エッジを受け取る。F キーと同じく main.ts がフレームごとに呼ぶ（16.18） */
+  takeMuteToggle(): boolean {
+    const toggled = this.pendingMuteToggle;
+    this.pendingMuteToggle = false;
+    return toggled;
+  }
+
   /**
    * 入力リセット（16.7）。押しっぱなしのキーは離して押し直すまで無効にし、未処理の Enter・P・ESC を捨てる。
-   * F（CRT の切り替え）はリセット対象に含まれず、どの状態でも切り替えられるため残す（16.15）
+   * F（CRT の切り替え）と M（音のオン・オフ）はリセット対象に含まれず、どの状態でも切り替えられるため残す（16.15・16.18）
    */
   reset(): void {
     for (const key of this.down) this.blocked.add(key);

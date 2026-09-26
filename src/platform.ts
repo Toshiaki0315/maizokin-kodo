@@ -1,5 +1,5 @@
 // Tauri との連携（仕様 14.2・14.5・16.3・16.10・16.15）。
-// フォーカス変化・×ボタン・⌘Q を受け取り、ハイスコアと CRT の設定を store プラグインで保存し、終了時にウィンドウを破棄する。
+// フォーカス変化・×ボタン・⌘Q を受け取り、ハイスコアと CRT・音の設定を store プラグインで保存し、終了時にウィンドウを破棄する。
 // Tauri の外（ブラウザで vite を開いたとき）でも画面を確認できるよう、そのときは保存をせずに動く。
 import { isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
@@ -14,6 +14,7 @@ const HISCORE_FILE = 'hiscore.json';
 const HISCORE_KEY = 'hiScore';
 const SETTINGS_FILE = 'settings.json';
 const CRT_KEY = 'crtEnabled';
+const SOUND_KEY = 'soundEnabled';
 
 /** 開発ビルドだけで警告を出す（16.10：保存の失敗） */
 function warnInDev(message: string, error: unknown): void {
@@ -52,26 +53,44 @@ export async function saveHiScore(value: number): Promise<void> {
   }
 }
 
-/** CRT の設定を読む。読み込めない場合はオン（16.15） */
-export async function loadCrtEnabled(): Promise<boolean> {
+/** オン・オフの設定を読む。読み込めない場合はオン */
+async function loadSetting(key: string, label: string): Promise<boolean> {
   const store = await openStore(SETTINGS_FILE);
   try {
-    const value = await store?.get<unknown>(CRT_KEY);
+    const value = await store?.get<unknown>(key);
     return typeof value === 'boolean' ? value : true;
   } catch (error) {
-    warnInDev('CRT の設定を読み込めませんでした', error);
+    warnInDev(`${label}の設定を読み込めませんでした`, error);
     return true;
   }
 }
 
-export async function saveCrtEnabled(enabled: boolean): Promise<void> {
+async function saveSetting(key: string, label: string, enabled: boolean): Promise<void> {
   const store = await openStore(SETTINGS_FILE);
   try {
-    await store?.set(CRT_KEY, enabled);
+    await store?.set(key, enabled);
     await store?.save();
   } catch (error) {
-    warnInDev('CRT の設定を保存できませんでした', error);
+    warnInDev(`${label}の設定を保存できませんでした`, error);
   }
+}
+
+/** CRT の設定を読む。読み込めない場合はオン（16.15） */
+export function loadCrtEnabled(): Promise<boolean> {
+  return loadSetting(CRT_KEY, 'CRT ');
+}
+
+export function saveCrtEnabled(enabled: boolean): Promise<void> {
+  return saveSetting(CRT_KEY, 'CRT ', enabled);
+}
+
+/** 音のオン・オフを読む。読み込めない場合はオン（16.18） */
+export function loadSoundEnabled(): Promise<boolean> {
+  return loadSetting(SOUND_KEY, '音');
+}
+
+export function saveSoundEnabled(enabled: boolean): Promise<void> {
+  return saveSetting(SOUND_KEY, '音', enabled);
 }
 
 export interface PlatformHandlers {
