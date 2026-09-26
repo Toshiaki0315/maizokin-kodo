@@ -29,3 +29,7 @@ src-tauri/target/
 
 # 直下の spec.md は docs/spec.md の複製（正本は docs/spec.md）
 /spec.md
+
+# Claude Code の手元専用の設定
+.claude/settings.local.json
+.claude/launch.json

@@ -280,3 +280,43 @@ describe('終了確認の取り消し：戻り先（仕様 16.1 の表）', () =
     expect(game.step(FIXED_STEP_MS, ESCAPE)).toEqual([]);
   });
 });
+
+describe('ミスの演出中か（描画用、仕様 16.5・16.12・16.16）', () => {
+  it('MISS の間は真、PLAYING では偽', () => {
+    const game = missGame();
+    expect(game.missInProgress).toBe(true);
+    game.step(1500, NO_INPUT);
+    expect(game.state).toBe('PLAYING');
+    expect(game.missInProgress).toBe(false);
+  });
+
+  it('MISS からの一時停止・終了確認の間も真（坑夫はミスの絵のまま）', () => {
+    const game = missGame();
+    game.focusLost();
+    expect(game.missInProgress).toBe(true);
+    game.closeRequested();
+    expect(game.missInProgress).toBe(true);
+    game.step(FIXED_STEP_MS, ESCAPE);
+    game.step(FIXED_STEP_MS, PAUSE);
+    expect(game.state).toBe('MISS');
+    expect(game.missInProgress).toBe(true);
+  });
+
+  it('MISS から直接の終了確認でも真', () => {
+    const game = missGame();
+    game.step(FIXED_STEP_MS, ESCAPE);
+    expect(game.missInProgress).toBe(true);
+  });
+
+  it('PLAYING からの一時停止・終了確認では偽', () => {
+    const game = playingGame();
+    game.step(FIXED_STEP_MS, PAUSE);
+    expect(game.missInProgress).toBe(false);
+    game.step(FIXED_STEP_MS, ESCAPE);
+    expect(game.missInProgress).toBe(false);
+  });
+
+  it('GAMEOVER では偽', () => {
+    expect(gameOverGame().missInProgress).toBe(false);
+  });
+});

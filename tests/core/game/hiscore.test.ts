@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Alien } from '../../../src/core/alien';
 import { FIXED_STEP_MS } from '../../../src/core/config';
-import type { Game, GameEvent } from '../../../src/core/game';
+import { parseHiScore, type Game, type GameEvent } from '../../../src/core/game';
 import { sequenceRng } from '../helpers';
 import { ENTER, ESCAPE, NO_INPUT, input, newGame, playingGame } from './gameHelpers';
 
@@ -146,5 +146,24 @@ describe('ハイスコア更新の表示（仕様 16.10）', () => {
     game.score = 5500;
     gameOver(game);
     expect(game.newRecord).toBe(false);
+  });
+});
+
+describe('parseHiScore：保存されていたハイスコアの検証（仕様 16.10）', () => {
+  it.each([0, 1, 5000, 123456])('0 以上の整数 %d はそのまま使う', (value) => {
+    expect(parseHiScore(value)).toBe(value);
+  });
+
+  it.each([
+    ['読み込めない（undefined）', undefined],
+    ['null', null],
+    ['負の数', -1],
+    ['小数', 12.5],
+    ['文字列', '9000'],
+    ['NaN', Number.NaN],
+    ['無限大', Number.POSITIVE_INFINITY],
+    ['オブジェクト', { hiScore: 9000 }],
+  ])('%s なら初期値 5000', (_, value) => {
+    expect(parseHiScore(value)).toBe(5000);
   });
 });

@@ -5,6 +5,7 @@ import {
   ACTION_INTERVAL_THRESHOLD_MS,
   COLS,
   DIR_VECTORS,
+  INITIAL_HI_SCORE,
   INITIAL_LIVES,
   MISS_DURATION_MS,
   MOVE_INTERVAL_THRESHOLD_MS,
@@ -78,6 +79,14 @@ export function placeGold(grid: Grid, count: number, rng: Rng): Gold[] {
     .map(({ x, y }) => ({ x, y, collected: false }));
 }
 
+/**
+ * 保存されていたハイスコアを検証する（16.10）。読み込めない場合や、0 以上の整数でない場合は初期値を使う。
+ * platform.ts が読み込んだ値をそのまま渡せるよう、型を問わず受け取る
+ */
+export function parseHiScore(value: unknown): number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : INITIAL_HI_SCORE;
+}
+
 export class Game {
   private _state: GameState = 'START';
   score = 0;
@@ -128,6 +137,20 @@ export class Game {
   /** そのゲームの開始時点のハイスコアを上回ったか。GAMEOVER の「ハイスコア更新！」に使う（16.10） */
   get newRecord(): boolean {
     return this.hiScore > this.gameStartHiScore;
+  }
+
+  /** 掘る・埋めるを実行してから 200ms 以内か。坑夫の side_dig の絵に使う（16.16） */
+  get isActing(): boolean {
+    return this.actionCooldown > 0;
+  }
+
+  /**
+   * ミスの演出中か。MISS から一時停止・終了確認に入っている間も含む。
+   * 坑夫をミスの絵で止め、向きの枠を消すのに使う（16.5・16.12・16.16）
+   */
+  get missInProgress(): boolean {
+    const resumesTo = this._state === 'QUIT_CONFIRM' ? this.quitReturn : this._state;
+    return resumesTo === 'MISS' || (resumesTo === 'PAUSED' && this.pauseReturn === 'MISS');
   }
 
   /** MISS に入ってからの経過時間。点滅と赤フラッシュの描画に使う（16.5） */
