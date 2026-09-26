@@ -49,6 +49,38 @@ function countReachable(grid: Grid, sx: number, sy: number): number {
   return seen.size;
 }
 
+/** (sx, sy) から、skip のマスを通らずにたどれる通路マス数 */
+function countReachableWithout(grid: Grid, sx: number, sy: number, skip: string): number {
+  const seen = new Set<string>([`${sx},${sy}`]);
+  const queue: Array<[number, number]> = [[sx, sy]];
+  while (queue.length > 0) {
+    const [x, y] = queue.shift()!;
+    for (const d of DIRS) {
+      const nx = x + d.x;
+      const ny = y + d.y;
+      const key = `${nx},${ny}`;
+      if (key !== skip && grid[ny]?.[nx] === PATH && !seen.has(key)) {
+        seen.add(key);
+        queue.push([nx, ny]);
+      }
+    }
+  }
+  return seen.size;
+}
+
+/** 取り除くと通路が分断される通路マス（切断点）の一覧 */
+function cutCells(grid: Grid): string[] {
+  const total = countPaths(grid);
+  const cuts: string[] = [];
+  forEachCell((x, y) => {
+    if (grid[y][x] !== PATH) return;
+    // 取り除くマス以外から探索を始める
+    const start = x === 1 && y === 1 ? [1, 3] : [1, 1];
+    if (countReachableWithout(grid, start[0], start[1], `${x},${y}`) !== total - 1) cuts.push(`${x},${y}`);
+  });
+  return cuts;
+}
+
 describe('generateMaze：迷路生成（仕様 6章）', () => {
   it('15×15 のグリッドで、各マスは通路か壁（仕様 2章・3章）', () => {
     for (const [, grid] of mazes) {
@@ -112,6 +144,13 @@ describe('generateMaze：迷路生成（仕様 6章）', () => {
   it('すべての通路が連結している（仕様 6.2）', () => {
     for (const [seed, grid] of mazes) {
       expect(countReachable(grid, PLAYER_START.x, PLAYER_START.y), `seed=${seed}`).toBe(countPaths(grid));
+    }
+  });
+
+  it('1か所でしかつながっていない区画がない：どの通路マスを取り除いても分断されない（仕様 6.1 手順6）', () => {
+    // 入口が1つしかない区画に入ると、お化けに入口をふさがれて逃げ道がなくなるため
+    for (const [seed, grid] of mazes) {
+      expect(cutCells(grid), `seed=${seed}`).toEqual([]);
     }
   });
 
