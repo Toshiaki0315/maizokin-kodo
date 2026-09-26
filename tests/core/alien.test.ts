@@ -1,41 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { Alien, createAliens, isPortalShown, type AlienContext } from '../../src/core/alien';
-import {
-  ALIEN_COLORS,
-  COLS,
-  FIXED_STEP_MS,
-  PORTAL_POS,
-  ROWS,
-  type Dir,
-  type Point,
-} from '../../src/core/config';
+import { ALIEN_COLORS, FIXED_STEP_MS, PORTAL_POS, type Dir, type Point } from '../../src/core/config';
 import { Holes } from '../../src/core/holes';
-import { PATH, WALL, type Grid } from '../../src/core/maze';
 import { createRng, type Rng } from '../../src/core/rng';
+import { closedGrid, openGrid, sequenceRng } from './helpers';
 
 // ---- テスト用の道具 ----
-
-/** 決まった値を順に返す Rng。方向の選択を狙いどおりに決めるため */
-function sequenceRng(...values: number[]): Rng {
-  let i = 0;
-  return { next: () => values[i++ % values.length] };
-}
-
-/** 外周だけが壁で、内側がすべて通路の盤面。walls に挙げたマスは壁にする */
-function openGrid(walls: Point[] = []): Grid {
-  const grid: Grid = Array.from({ length: ROWS }, (_, y) =>
-    Array.from({ length: COLS }, (_, x) => (x === 0 || y === 0 || x === COLS - 1 || y === ROWS - 1 ? WALL : PATH)),
-  );
-  for (const w of walls) grid[w.y][w.x] = WALL;
-  return grid;
-}
-
-/** すべて壁で、paths に挙げたマスだけ通路の盤面 */
-function closedGrid(paths: Point[]): Grid {
-  const grid: Grid = Array.from({ length: ROWS }, () => Array.from({ length: COLS }, () => WALL));
-  for (const p of paths) grid[p.y][p.x] = PATH;
-  return grid;
-}
 
 // プレイヤーを置く、どのテストのエイリアンとも同じ行・列にならない場所
 const FAR_AWAY: Point = { x: 13, y: 13 };
