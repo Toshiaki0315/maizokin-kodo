@@ -116,6 +116,10 @@ export class Game {
       case 'PLAYING':
         this.update(dtMs, input, events);
         break;
+      case 'LEVEL_CLEAR':
+        // クリアした瞬間の盤面のまま止め、Enter で次の坑道へ（4章）
+        if (input.enter) this.nextLevel(events);
+        break;
       default:
         break;
     }
@@ -135,6 +139,45 @@ export class Game {
     for (const alien of this.aliens) {
       alien.update(dt, ctx);
     }
+
+    // 手順3：金塊の取得
+    for (const gold of this.gold) {
+      if (!gold.collected && gold.x === this.player.x && gold.y === this.player.y) {
+        gold.collected = true;
+        this.score += 200;
+      }
+    }
+
+    // 手順4：全金塊を取った最初のステップで階段を出す（1レベル1回）
+    if (this.stairs === null && this.gold.length > 0 && this.gold.every((g) => g.collected)) {
+      this.stairs = { x: PORTAL_POS.x, y: PORTAL_POS.y };
+      this.score += 500;
+    }
+
+    // 手順5：階段に乗ったらクリア
+    if (this.stairs !== null && this.player.x === this.stairs.x && this.player.y === this.stairs.y) {
+      this._state = 'LEVEL_CLEAR';
+      this.score += 1000;
+    }
+  }
+
+  /** 次の坑道へ（9.3）。スコアと残機は引き継ぐ */
+  private nextLevel(events: GameEvent[]): void {
+    this.level += 1;
+    this.initLevel();
+    this.resetInput(events);
+    this._state = 'PLAYING';
+  }
+
+  /**
+   * 入力リセット（16.7）。クールダウンをゲーム側で戻し、キーの押下状態は input.ts に依頼する。
+   * 原作は状態遷移のときにリセットしない（13.1 #9）
+   */
+  private resetInput(events: GameEvent[]): void {
+    this.moveCooldown = 0;
+    this.actionCooldown = 0;
+    this.player.turnCooldown = 0;
+    events.push({ type: 'inputReset' });
   }
 
   /** プレイヤーの移動・掘る・埋める（5.3） */
