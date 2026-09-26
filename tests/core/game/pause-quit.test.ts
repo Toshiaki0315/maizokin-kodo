@@ -281,7 +281,7 @@ describe('終了確認の取り消し：戻り先（仕様 16.1 の表）', () =
   });
 });
 
-describe('ミスの演出中か（描画用、仕様 16.5・16.12・16.16）', () => {
+describe('ミスの演出中か（描画用、仕様 16.5・16.16）', () => {
   it('MISS の間は真、PLAYING では偽', () => {
     const game = missGame();
     expect(game.missInProgress).toBe(true);
