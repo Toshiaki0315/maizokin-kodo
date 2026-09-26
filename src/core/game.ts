@@ -2,11 +2,15 @@
 // main.ts が固定ステップごとに step() を呼び、外部への要求と描画用の出来事をイベントで受け取る（14.5）。
 import { Alien, createAliens } from './alien';
 import {
+  ACTION_INTERVAL_THRESHOLD_MS,
   COLS,
+  DIR_VECTORS,
   INITIAL_LIVES,
+  MOVE_INTERVAL_THRESHOLD_MS,
   PLAYER_START,
   PORTAL_POS,
   ROWS,
+  TURN_COOLDOWN_MS,
   goldCount,
   type Dir,
 } from './config';
@@ -85,6 +89,10 @@ export class Game {
   stairs: { x: number; y: number } | null = null;
   player: Player = Game.initialPlayer();
 
+  // 移動と掘る・埋めるの連続入力間隔（原作ではグローバル変数、5.3）
+  private moveCooldown = 0;
+  private actionCooldown = 0;
+
   constructor(
     private readonly rng: Rng,
     initialHiScore: number,
@@ -106,7 +114,7 @@ export class Game {
         if (input.enter) this._state = 'PLAYING';
         break;
       case 'PLAYING':
-        this.update(dtMs, events);
+        this.update(dtMs, input, events);
         break;
       default:
         break;
@@ -115,7 +123,9 @@ export class Game {
   }
 
   /** PLAYING 中のロジック更新（11章） */
-  private update(dt: number, _events: GameEvent[]): void {
+  private update(dt: number, input: InputSnapshot, _events: GameEvent[]): void {
+    this.handleInput(dt, input);
+
     const ctx = {
       grid: this.grid,
       holes: this.holes,
@@ -125,6 +135,69 @@ export class Game {
     for (const alien of this.aliens) {
       alien.update(dt, ctx);
     }
+  }
+
+  /** プレイヤーの移動・掘る・埋める（5.3） */
+  private handleInput(dt: number, input: InputSnapshot): void {
+    const player = this.player;
+    const inputDir = input.dir;
+    player.isMoving = inputDir !== null;
+    if (inputDir === 'LEFT' || inputDir === 'RIGHT') player.faceDir = inputDir;
+
+    if (this.moveCooldown > 0) this.moveCooldown -= dt;
+    if (this.actionCooldown > 0) this.actionCooldown -= dt;
+    if (player.turnCooldown > 0) player.turnCooldown -= dt;
+
+    // 手順5：Z・X はアクション優先。方向入力は向きを変えるだけで、このステップは移動しない
+    if (input.dig || input.fill) {
+      if (inputDir !== null) player.dir = inputDir;
+      if (this.actionCooldown <= 0) {
+        const tx = player.x + DIR_VECTORS[player.dir].x;
+        const ty = player.y + DIR_VECTORS[player.dir].y;
+        // 前方が壁・盤面外なら何もせず、クールダウンも付けない
+        if (this.isPath(tx, ty)) {
+          if (input.dig) {
+            this.holes.dig(tx, ty);
+            this.actionCooldown = ACTION_INTERVAL_THRESHOLD_MS;
+          } else if (this.holes.fill(tx, ty)) {
+            // 穴がなければ何もせず、クールダウンも付けない
+            this.actionCooldown = ACTION_INTERVAL_THRESHOLD_MS;
+          }
+        }
+      }
+      player.isMoving = false;
+      return;
+    }
+
+    // 手順7：方向入力なし。離すと移動のクールダウンを戻すので、タップですぐ進める（5.4）
+    if (inputDir === null) {
+      this.moveCooldown = 0;
+      return;
+    }
+
+    // 手順6-1：違う方向なら向きを変えるだけ
+    if (player.dir !== inputDir) {
+      player.dir = inputDir;
+      player.turnCooldown = TURN_COOLDOWN_MS;
+      this.moveCooldown = MOVE_INTERVAL_THRESHOLD_MS;
+      return;
+    }
+
+    // 手順6-2：穴のある通路には、深さに関係なく入れない（5.4）。進めないときはクールダウンを付けない
+    if (this.moveCooldown <= 0 && player.turnCooldown <= 0) {
+      const nx = player.x + DIR_VECTORS[inputDir].x;
+      const ny = player.y + DIR_VECTORS[inputDir].y;
+      if (this.isPath(nx, ny) && !this.holes.has(nx, ny)) {
+        player.x = nx;
+        player.y = ny;
+        this.moveCooldown = MOVE_INTERVAL_THRESHOLD_MS;
+      }
+    }
+  }
+
+  /** 盤面内の通路か */
+  private isPath(x: number, y: number): boolean {
+    return x >= 0 && x < COLS && y >= 0 && y < ROWS && this.grid[y][x] === PATH;
   }
 
   /** レベル開始（9.1 の順）。迷路 → プレイヤーとエイリアン → 穴と階段 → 金塊 */
