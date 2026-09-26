@@ -1,7 +1,9 @@
 // キーの押下状態・押下エッジ・入力リセット（仕様 5.1、13.1 #10、14.5、16.7）。
 // DOM には触れず、main.ts が KeyboardEvent.code を toGameKey() で変換して渡す。
 
-export type Dir = 'UP' | 'DOWN' | 'LEFT' | 'RIGHT';
+import { DIRS, type Dir } from './config';
+
+export type { Dir };
 
 /** 固定ステップごとに game.step() へ渡す入力（14.5） */
 export interface InputSnapshot {
@@ -43,8 +45,8 @@ export function toGameKey(code: string): GameKey | null {
   return KEY_BY_CODE[code] ?? null;
 }
 
-/** 同時押し時の優先順位 上 > 下 > 左 > 右（5.1） */
-const DIR_PRIORITY: readonly Dir[] = ['UP', 'DOWN', 'LEFT', 'RIGHT'];
+/** 同時押し時の優先順位 上 > 下 > 左 > 右（5.1）。DIRS と同じ順 */
+const DIR_PRIORITY = DIRS;
 
 /** 押下エッジで扱うキー。スナップショットに載るもの（14.5） */
 type EdgeKey = 'ENTER' | 'PAUSE' | 'ESCAPE';
