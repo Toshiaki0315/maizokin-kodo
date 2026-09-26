@@ -258,6 +258,7 @@ export class Game {
       holes: this.holes,
       player: this.player,
       stairsVisible: this.stairs !== null,
+      aliens: this.aliens,
     };
     // 手順2：エイリアンを配列順に更新し、1体ごとに直後にミスを判定する
     for (const alien of this.aliens) {

@@ -31,6 +31,8 @@ export interface AlienContext {
   readonly player: Point;
   /** 階段が出ているか。出ている間は出現しない（16.13） */
   readonly stairsVisible: boolean;
+  /** 同じ盤面のお化け全員（自分を含む）。ほかのお化けと重ならないように使う（8.4） */
+  readonly aliens: readonly Alien[];
 }
 
 /** update() で起きたこと。撃破したときだけ 'killed' を返す */
@@ -73,7 +75,8 @@ export class Alien {
     if (this.state === 'WAITING_SPAWN') {
       if (ctx.stairsVisible) return null;
       this.respawnTimer -= dt;
-      if (this.respawnTimer <= 0) this.spawn();
+      // ポータルにほかのお化けがいる間は、重ならないようにどくまで待つ（デスクトップ版で追加）
+      if (this.respawnTimer <= 0 && !this.isOccupied(PORTAL_POS.x, PORTAL_POS.y, ctx)) this.spawn();
       // 出現したステップは動かない
       return null;
     }
@@ -127,7 +130,10 @@ export class Alien {
     const validDirs = DIRS.filter((d) => {
       const nx = this.x + DIR_VECTORS[d].x;
       const ny = this.y + DIR_VECTORS[d].y;
-      return nx >= 0 && nx < COLS && ny >= 0 && ny < ROWS && ctx.grid[ny][nx] === PATH;
+      // ほかのお化けがいるマスには進まない（デスクトップ版で追加）。行き場がなければとどまる
+      return (
+        nx >= 0 && nx < COLS && ny >= 0 && ny < ROWS && ctx.grid[ny][nx] === PATH && !this.isOccupied(nx, ny, ctx)
+      );
     });
     if (validDirs.length === 0) return;
 
@@ -175,6 +181,16 @@ export class Alien {
       return player.x > this.x ? 'RIGHT' : 'LEFT';
     }
     return null;
+  }
+
+  /**
+   * ほかのお化けが (x, y) にいるか。見えているお化け（歩行中・捕獲中）だけを数える。
+   * お化けは1体ずつ順に動くので、同じステップで先に動いたお化けの新しい位置も避けられる
+   */
+  private isOccupied(x: number, y: number, ctx: AlienContext): boolean {
+    return ctx.aliens.some(
+      (other) => other !== this && (other.state === 'WALKING' || other.state === 'TRAPPED') && other.x === x && other.y === y,
+    );
   }
 
   private randomDir(): Dir {
