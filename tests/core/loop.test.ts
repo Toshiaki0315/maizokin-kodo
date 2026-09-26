@@ -82,8 +82,10 @@ describe('FixedStepLoop：固定タイムステップの計算（仕様 14.3）'
   it('ばらつきのあるフレーム時間でも、合計時間ぶんのステップが進む', () => {
     const loop = new FixedStepLoop();
     let steps = 0;
-    // 16.6ms と 16.8ms を交互に 600 フレーム（合計 10 秒）
-    for (let i = 0; i < 600; i++) steps += loop.advance(i % 2 === 0 ? 16.6 : 16.8);
+    // 1ステップより短いフレームと長いフレームを交互に 600 フレーム。2フレームでちょうど2ステップ分（合計 10 秒）
+    const short = 16.6;
+    const long = FIXED_STEP_MS * 2 - short;
+    for (let i = 0; i < 600; i++) steps += loop.advance(i % 2 === 0 ? short : long);
     expect(steps).toBe(600);
   });
 });
