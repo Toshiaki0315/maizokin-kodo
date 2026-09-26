@@ -87,7 +87,9 @@ export class GameRenderer {
   private readonly crt = new CRTFilter({
     lineContrast: 0.15,
     curvature: 0.5,
+    // 四隅の減光。暗くなり始める位置は 0.3、暗さは最大 30% にとどめ、四隅の文字が読めるようにする
     vignetting: 0.3,
+    vignettingAlpha: 0.3,
     noise: 0.05,
   });
 
