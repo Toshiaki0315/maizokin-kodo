@@ -27,6 +27,7 @@ describe('toGameKey：キーとゲーム操作の対応（仕様 5.1）', () => 
     ['KeyP', 'PAUSE'],
     ['Escape', 'ESCAPE'],
     ['KeyF', 'CRT'],
+    ['KeyM', 'MUTE'],
   ])('%s は %s', (code, key) => {
     expect(toGameKey(code)).toBe(key);
   });
@@ -244,5 +245,37 @@ describe('Input：releaseAll（ウィンドウのフォーカス喪失時）', (
     expect(input.snapshot()).toEqual(NOTHING);
     press(input, 'LEFT', 'ENTER');
     expect(input.snapshot()).toMatchObject({ dir: 'LEFT', enter: true });
+  });
+});
+
+describe('Input：M キー（音のオン・オフ、仕様 16.18）', () => {
+  it('押下エッジを1回だけ受け取れて、スナップショットには載らない', () => {
+    const input = new Input();
+    input.keyDown('MUTE');
+    expect(input.snapshot()).toEqual(NOTHING);
+    expect(input.takeMuteToggle()).toBe(true);
+    expect(input.takeMuteToggle()).toBe(false);
+  });
+
+  it('キーリピートでは切り替わらない', () => {
+    const input = new Input();
+    input.keyDown('MUTE');
+    input.takeMuteToggle();
+    input.keyDown('MUTE');
+    expect(input.takeMuteToggle()).toBe(false);
+  });
+
+  it('入力リセットでは消えない（どの状態でも切り替えられる）', () => {
+    const input = new Input();
+    input.keyDown('MUTE');
+    input.reset();
+    expect(input.takeMuteToggle()).toBe(true);
+  });
+
+  it('F キーとは別に受け取る', () => {
+    const input = new Input();
+    input.keyDown('MUTE');
+    expect(input.takeCrtToggle()).toBe(false);
+    expect(input.takeMuteToggle()).toBe(true);
   });
 });
