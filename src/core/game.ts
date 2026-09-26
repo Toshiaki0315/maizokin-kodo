@@ -97,6 +97,10 @@ export class Game {
   private quitReturn: GameState = 'START';
   /** 終了を確定したか。確定後は何も受け付けない */
   private quitting = false;
+  /** 前回保存したハイスコア。これより増えたときだけ保存する（16.10） */
+  private savedHiScore: number;
+  /** そのゲームの開始時点のハイスコア。「ハイスコア更新！」の判定に使う（16.10） */
+  private gameStartHiScore: number;
 
   // 移動と掘る・埋めるの連続入力間隔（原作ではグローバル変数、5.3）
   private moveCooldown = 0;
@@ -107,12 +111,19 @@ export class Game {
     initialHiScore: number,
   ) {
     this.hiScore = initialHiScore;
+    this.savedHiScore = initialHiScore;
+    this.gameStartHiScore = initialHiScore;
     // 起動時に level 1 を用意し、START 画面の背景に盤面を見せる（4章）
     this.initLevel();
   }
 
   get state(): GameState {
     return this._state;
+  }
+
+  /** そのゲームの開始時点のハイスコアを上回ったか。GAMEOVER の「ハイスコア更新！」に使う（16.10） */
+  get newRecord(): boolean {
+    return this.hiScore > this.gameStartHiScore;
   }
 
   /** MISS に入ってからの経過時間。点滅と赤フラッシュの描画に使う（16.5） */
@@ -130,7 +141,10 @@ export class Game {
     }
     switch (this._state) {
       case 'START':
-        if (input.enter) this._state = 'PLAYING';
+        if (input.enter) {
+          this.gameStartHiScore = this.hiScore;
+          this._state = 'PLAYING';
+        }
         break;
       case 'PLAYING':
         if (input.pause) {
@@ -161,9 +175,8 @@ export class Game {
         // タイトルに戻らず、level 1 の新しいゲームを始める（4章）
         if (input.enter) this.retry(events);
         break;
-      default:
-        break;
     }
+    this.updateHiScore();
     return events;
   }
 
@@ -194,6 +207,8 @@ export class Game {
     if (this.quitting) return;
     if (input.enter) {
       this.quitting = true;
+      // 保存 → 終了 の順で返す。platform.ts は保存の完了を待ってからウィンドウを破棄する（14.5）
+      this.saveHiScoreIfNeeded(events);
       events.push({ type: 'quit' });
     } else if (input.escape) {
       // PLAYING から来たときは、すぐ再開せず PAUSED で止める。ほかは元の状態へ（16.1 の表）
@@ -206,7 +221,7 @@ export class Game {
   }
 
   /** PLAYING 中のロジック更新（11章） */
-  private update(dt: number, input: InputSnapshot, _events: GameEvent[]): void {
+  private update(dt: number, input: InputSnapshot, events: GameEvent[]): void {
     // すれ違いの判定のため、動く前のプレイヤーの位置を記録する（16.14）
     const playerBefore = { x: this.player.x, y: this.player.y };
     this.handleInput(dt, input);
@@ -248,6 +263,7 @@ export class Game {
     if (this.stairs !== null && this.player.x === this.stairs.x && this.player.y === this.stairs.y) {
       this._state = 'LEVEL_CLEAR';
       this.score += 1000;
+      this.saveHiScoreIfNeeded(events);
     }
   }
 
@@ -290,6 +306,7 @@ export class Game {
       this._state = 'PLAYING';
     } else {
       this._state = 'GAMEOVER';
+      this.saveHiScoreIfNeeded(events);
     }
   }
 
@@ -298,9 +315,24 @@ export class Game {
     this.score = 0;
     this.lives = INITIAL_LIVES;
     this.level = 1;
+    this.gameStartHiScore = this.hiScore;
     this.initLevel();
     this.resetInput(events);
     this._state = 'PLAYING';
+  }
+
+  /** スコアがハイスコアを上回ったら、ハイスコアをスコアと同じ値にする（16.10） */
+  private updateHiScore(): void {
+    if (this.score > this.hiScore) this.hiScore = this.score;
+  }
+
+  /** 前回保存した値から増えていれば保存を依頼する（16.10） */
+  private saveHiScoreIfNeeded(events: GameEvent[]): void {
+    this.updateHiScore();
+    if (this.hiScore > this.savedHiScore) {
+      this.savedHiScore = this.hiScore;
+      events.push({ type: 'saveHiScore', value: this.hiScore });
+    }
   }
 
   /** 次の坑道へ（9.3）。スコアと残機は引き継ぐ */
