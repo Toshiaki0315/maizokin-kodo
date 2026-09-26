@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  埋蔵金坑道のアプリアイコン（仕様 16.11）
+  木枠で組まれた坑道の入口を正面から描き、その奥の暗がりに金塊が1つ光っている。
+  1024×1024 の中に、macOS のアイコンテンプレートに合わせた 824×824 の角丸四角形を置く。
+  書き出しに使う macOS の画像の仕組みがフィルターに対応しないため、影や光はグラデーションと半透明の図形で表す
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <clipPath id="shape">
+      <rect x="100" y="100" width="824" height="824" rx="185" ry="185"/>
+    </clipPath>
+    <!-- 奥の暗がり：盤面の床色 #000022 からページ背景 #050510 へ -->
+    <linearGradient id="dark" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#000022"/>
+      <stop offset="1" stop-color="#050510"/>
+    </linearGradient>
+    <!-- 金塊の光：#FFCC00 の放射状グラデーション（中心の不透明度0.6から外周0） -->
+    <radialGradient id="glow" gradientUnits="userSpaceOnUse" cx="512" cy="600" r="330">
+      <stop offset="0" stop-color="#FFCC00" stop-opacity="0.6"/>
+      <stop offset="1" stop-color="#FFCC00" stop-opacity="0"/>
+    </radialGradient>
+    <!-- 木材：明部 #8A5A36 から #663C21 へ -->
+    <linearGradient id="woodV" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#8A5A36"/>
+      <stop offset="0.35" stop-color="#663C21"/>
+      <stop offset="1" stop-color="#663C21"/>
+    </linearGradient>
+    <linearGradient id="woodH" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8A5A36"/>
+      <stop offset="0.35" stop-color="#663C21"/>
+      <stop offset="1" stop-color="#663C21"/>
+    </linearGradient>
+    <!-- 金塊の前面：#FFDF00 から影 #B8860B へ -->
+    <linearGradient id="goldFront" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFDF00"/>
+      <stop offset="1" stop-color="#B8860B"/>
+    </linearGradient>
+  </defs>
+
+  <!-- テンプレートの影（下へ少しずらした半透明の角丸四角形を重ねる） -->
+  <rect x="96" y="112" width="832" height="832" rx="189" fill="#000000" fill-opacity="0.06"/>
+  <rect x="98" y="108" width="828" height="828" rx="187" fill="#000000" fill-opacity="0.08"/>
+  <rect x="100" y="104" width="824" height="824" rx="185" fill="#000000" fill-opacity="0.10"/>
+
+  <g clip-path="url(#shape)">
+    <!-- 奥の暗がり -->
+    <rect x="100" y="100" width="824" height="824" fill="url(#dark)"/>
+
+    <!-- 金塊の光 -->
+    <circle cx="512" cy="600" r="330" fill="url(#glow)"/>
+
+    <!-- 金塊（延べ棒）：上面・前面・側面・光沢 -->
+    <polygon points="402,540 622,540 682,610 342,610" fill="#FFDF00"/>
+    <polygon points="342,610 682,610 700,700 324,700" fill="url(#goldFront)"/>
+    <polygon points="622,540 682,610 700,700 700,690 640,560" fill="#B8860B"/>
+    <!-- 上面と前面の境目 -->
+    <polygon points="342,606 682,606 684,616 340,616" fill="#B8860B" fill-opacity="0.7"/>
+    <polygon points="410,552 540,552 530,566 404,566" fill="#FFFFFF" fill-opacity="0.85"/>
+    <polygon points="404,566 418,566 380,604 364,604" fill="#FFFFFF" fill-opacity="0.6"/>
+    <!-- 光沢のきらめき -->
+    <polygon points="600,470 612,512 654,524 612,536 600,578 588,536 546,524 588,512" fill="#FFFFFF"/>
+
+    <!-- 坑道の枠：左右の柱 -->
+    <rect x="100" y="100" width="160" height="824" fill="url(#woodV)"/>
+    <rect x="764" y="100" width="160" height="824" fill="url(#woodV)"/>
+    <!-- 柱の内側の陰（奥行き） -->
+    <rect x="240" y="260" width="20" height="664" fill="#000000" fill-opacity="0.35"/>
+    <rect x="764" y="260" width="20" height="664" fill="#000000" fill-opacity="0.25"/>
+    <!-- 柱の木目 -->
+    <rect x="150" y="100" width="6" height="824" fill="#000000" fill-opacity="0.18"/>
+    <rect x="200" y="100" width="6" height="824" fill="#000000" fill-opacity="0.14"/>
+    <rect x="820" y="100" width="6" height="824" fill="#000000" fill-opacity="0.18"/>
+    <rect x="870" y="100" width="6" height="824" fill="#000000" fill-opacity="0.14"/>
+
+    <!-- 坑道の枠：上の梁 -->
+    <rect x="100" y="100" width="824" height="170" fill="url(#woodH)"/>
+    <!-- 梁の下端の陰と木目 -->
+    <rect x="260" y="250" width="504" height="20" fill="#000000" fill-opacity="0.35"/>
+    <rect x="100" y="160" width="824" height="6" fill="#000000" fill-opacity="0.16"/>
+    <rect x="100" y="210" width="824" height="6" fill="#000000" fill-opacity="0.12"/>
+    <!-- 梁と柱の継ぎ目 -->
+    <rect x="254" y="100" width="6" height="170" fill="#000000" fill-opacity="0.3"/>
+    <rect x="764" y="100" width="6" height="170" fill="#000000" fill-opacity="0.3"/>
+  </g>
+</svg>

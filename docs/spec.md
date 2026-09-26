@@ -905,7 +905,8 @@ GAMEOVER のオーバーレイでは、そのゲームの開始時点のハイ�
 **ファイルと生成手順**
 
 - 原本：`src-tauri/icons/source/app-icon.svg`（編集用）と、書き出した `app-icon.png`（1024×1024）
-- `npm run tauri icon src-tauri/icons/source/app-icon.png` で、16.9 に列挙した各サイズと `icon.icns` を生成する
+- PNG への書き出しは `swift scripts/export-icon.swift src-tauri/icons/source/app-icon.svg src-tauri/icons/source/app-icon.png` で行う（macOS 標準の NSImage で SVG を読むため、追加の道具は要らない）。NSImage はぼかしなどの SVG フィルターに対応しないため、原本では影や光をグラデーションと半透明の図形で表す
+- `npm run tauri icon src-tauri/icons/source/app-icon.png` で、16.9 に列挙した各サイズと `icon.icns` を生成する。同時に作られる iOS・Android 用の画像（`ios/`・`android/`）は対象外なので含めない
 - 生成したファイルもリポジトリに含める（CI でのビルドに必要）
 
 ### 16.12 向きの表示（廃止）
