@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>埋蔵金坑道</title>
+    <style>
+        body {
+            background-color: #050510;
+            color: #FFFF00;
+            font-family: "Courier New", Courier, monospace, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+        #game-container {
+            text-align: center;
+            border: 4px solid #00FF00;
+            border-radius: 8px;
+            background-color: #000033;
+            box-shadow: 0 0 20px rgba(0, 255, 0, 0.5);
+            padding: 10px;
+        }
+        canvas {
+            display: block;
+            background-color: #000033;
+            margin: 0 auto;
+            image-rendering: pixelated; /* ドット絵をくっきり表示 */
+        }
+        .info {
+            margin-top: 10px;
+            font-size: 16px;
+            color: #00FF00;
+            text-shadow: 0 0 5px #00FF00;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <!-- ゲーム描画用キャンバス (600x640: 上部40pxはUI、下600pxは15x15グリッド) -->
+        <canvas id="gameCanvas" width="600" height="640"></canvas>
+        <div class="info">Z: 掘る  X: 埋める  矢印: 移動</div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let score = 0;
+        let hiScore = 5000;
+        let lives = 3;
+        let level = 1;
+        let gameState = "START"; // START, PLAYING, GAMEOVER, LEVEL_CLEAR
+
+        // グリッド定数: 15x15
+        const COLS = 15;
+        const ROWS = 15;
+        const TILE_SIZE = 40; // Canvas 600x600 -> 15 * 40 = 600
+
+        // マップ: 0 = 道, 1 = 壁
+        let grid = [];
+        let holes = {}; // key: "x,y", value: { stage: 1..3 }
+        let goldItems = []; 
+        let aliens = [];
+        let stairs = null; // 金塊全回収後に出現する階段 {x, y}
+
+        // プレイヤーオブジェクト
+        let player = {
+            x: 7,
+            y: 13,
+            dir: 'UP',
+            faceDir: 'RIGHT', // ドット絵の左右反転用
+            turnCooldown: 0, 
+            isMoving: false  
+        };
+
+        const palette = {
+            'B': '#111111', // 黒（フチ取り・目）
+            'Y': '#FFCC00', // 黄色（ヘルメット・服）
+            'F': '#FFCC99', // 肌色（顔）
+            'L': '#2266CC', // 青（オーバーオールなど）
+            'W': '#EEEEEE', // 明るいシルバー（ツルハシの刃など）
+            'S': '#663C21'  // 木目色（ツルハシの柄）
+        };
+
+        const pStand = [
+            "....BBBBBB....",
+            "...BYYYYYYB...",
+            "...BYYYYYYB...",
+            "..BBYYYYYYBB..",
+            "...BFFFFFFB...",
+            "...BFBFFBFB...",
+            "...BFFFFFFB...",
+            "...BFFFFFFB...",
+            "..BBLLYYLLBB..",
+            ".BWWBYYYYYBWBB",
+            "BSSWBYYYYYBWBB",
+            "BSSWBYYYYYBWBB",
+            ".BBWBYYYYBYB..",
+            "....BBYYBB....",
+            "....B....B....",
+            "...BB....BB..."
+        ];
+
+        const pWalk = [
+            "....BBBBBB....",
+            "...BYYYYYYB...",
+            "...BYYYYYYB...",
+            "..BBYYYYYYBB..",
+            "...BFFFFFFB...",
+            "...BFBFFBFB...",
+            "...BFFFFFFB...",
+            "...BFFFFFFB...",
+            "..BBLLYYLLBB..",
+            ".BWWBYYYYYBWBB",
+            "BSSWBYYYYYBWBB",
+            "BSSWBYYYYBYB..",
+            ".BBWBBYYBBB...",
+            "....B....B....",
+            "....B....BB...",
+            "...BB....BB..."
+        ];
+
+        // ループ型迷路生成アルゴリズム（穴掘り法 ＋ 行き止まり全消去で完全ループ化）
+        function generateLoopMaze() {
+            grid = Array.from({ length: ROWS }, () => Array(COLS).fill(1));
+            let visited = Array.from({ length: ROWS }, () => Array(COLS).fill(false));
+            
+            function carve(cx, cy) {
+                visited[cy][cx] = true;
+                grid[cy][cx] = 0; 
+                const dirs = [
+                    {x: 0, y: -2}, {x: 0, y: 2},
+                    {x: -2, y: 0}, {x: 2, y: 0}
+                ].sort(() => Math.random() - 0.5);
+
+                for (let d of dirs) {
+                    let nx = cx + d.x;
+                    let ny = cy + d.y;
+                    if (nx > 0 && nx < COLS - 1 && ny > 0 && ny < ROWS - 1) {
+                        if (!visited[ny][nx]) {
+                            grid[cy + d.y / 2][cx + d.x / 2] = 0; 
+                            carve(nx, ny);
+                        }
+                    }
+                }
+            }
+            carve(1, 1);
+
+            let deadEndsExist = true;
+            while (deadEndsExist) {
+                deadEndsExist = false;
+                for (let y = 1; y < ROWS - 1; y++) {
+                    for (let x = 1; x < COLS - 1; x++) {
+                        if (grid[y][x] === 0) {
+                            let wallCount = 0;
+                            const checks = [{x:0, y:-1}, {x:0, y:1}, {x:-1, y:0}, {x:1, y:0}];
+                            let wallCandidates = [];
+                            for (let c of checks) {
+                                let tx = x + c.x;
+                                let ty = y + c.y;
+                                if (grid[ty][tx] === 1) {
+                                    wallCount++;
+                                    if (tx > 0 && tx < COLS - 1 && ty > 0 && ty < ROWS - 1) {
+                                        wallCandidates.push({x: tx, y: ty});
+                                    }
+                                }
+                            }
+                            if (wallCount >= 3) {
+                                deadEndsExist = true;
+                                if (wallCandidates.length > 0) {
+                                    let targetWall = wallCandidates[Math.floor(Math.random() * wallCandidates.length)];
+                                    grid[targetWall.y][targetWall.x] = 0; 
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            for (let x = 0; x < COLS; x++) {
+                grid[0][x] = 1;
+                grid[ROWS - 1][x] = 1;
+            }
+            for (let y = 0; y < ROWS; y++) {
+                grid[y][0] = 1;
+                grid[y][COLS - 1] = 1;
+            }
+        }
+
+        class Alien {
+            constructor(spawnX, spawnY, initialDelay = 0, color = '#FF3333') {
+                this.x = spawnX;
+                this.y = spawnY;
+                this.color = color;
+                const dirs = ['UP', 'DOWN', 'LEFT', 'RIGHT'];
+                this.dir = dirs[Math.floor(Math.random() * dirs.length)];
+
+                if (initialDelay > 0) {
+                    this.state = 'WAITING_SPAWN';
+                    this.respawnTimer = initialDelay;
+                } else {
+                    this.state = 'WALKING'; 
+                    this.respawnTimer = 0; 
+                }
+
+                this.portalTimer = 1000; 
+                this.trapTimer = 0; 
+                this.moveTimer = 0;
+                this.moveInterval = 450; 
+            }
+
+            update(dt) {
+                if (this.state === 'WAITING_SPAWN') {
+                    this.respawnTimer -= dt;
+                    if (this.respawnTimer <= 1000 && this.portalTimer === 1000) {
+                        this.portalTimer = 1000;
+                    }
+                    if (this.respawnTimer <= 0) {
+                        this.x = 7;
+                        this.y = 7;
+                        this.state = 'WALKING';
+                        this.trapTimer = 0;
+                        this.portalTimer = 1000; 
+                        const dirs = ['UP', 'DOWN', 'LEFT', 'RIGHT'];
+                        this.dir = dirs[Math.floor(Math.random() * dirs.length)];
+                    }
+                    return;
+                }
+
+                if (this.portalTimer > 0) {
+                    this.portalTimer -= dt;
+                }
+
+                if (this.state === 'DEAD') {
+                    this.state = 'WAITING_SPAWN';
+                    this.respawnTimer = 15000; 
+                    this.portalTimer = 1000;
+                    return;
+                }
+
+                if (this.state === 'TRAPPED') {
+                    this.trapTimer -= dt;
+                    const key = `${this.x},${this.y}`;
+                    if (!holes[key] || holes[key].stage === 0) {
+                        this.state = 'DEAD';
+                        score += 100; 
+                        delete holes[key];
+                        return;
+                    }
+                    if (this.trapTimer <= 0) {
+                        this.state = 'WALKING';
+                        delete holes[key]; 
+                    }
+                    return;
+                }
+
+                this.moveTimer += dt;
+                if (this.moveTimer >= this.moveInterval) {
+                    this.moveTimer = 0;
+                    this.decideMove();
+                }
+            }
+
+            decideMove() {
+                let targetDir = null;
+                if (this.x === player.x) {
+                    let startY = Math.min(this.y, player.y);
+                    let endY = Math.max(this.y, player.y);
+                    let clear = true;
+                    for (let y = startY + 1; y < endY; y++) {
+                        if (grid[y][this.x] === 1) clear = false;
+                    }
+                    if (clear) {
+                        targetDir = player.y > this.y ? 'DOWN' : 'UP';
+                    }
+                } else if (this.y === player.y) {
+                    let startX = Math.min(this.x, player.x);
+                    let endX = Math.max(this.x, player.x);
+                    let clear = true;
+                    for (let x = startX + 1; x < endX; x++) {
+                        if (grid[this.y][x] === 1) clear = false;
+                    }
+                    if (clear) {
+                        targetDir = player.x > this.x ? 'RIGHT' : 'LEFT';
+                    }
+                }
+
+                let validDirs = [];
+                const dirs = ['UP', 'DOWN', 'LEFT', 'RIGHT'];
+                const dx = { UP: 0, DOWN: 0, LEFT: -1, RIGHT: 1 };
+                const dy = { UP: -1, DOWN: 1, LEFT: 0, RIGHT: 0 };
+
+                for (let d of dirs) {
+                    let nx = this.x + dx[d];
+                    let ny = this.y + dy[d];
+                    if (nx >= 0 && nx < COLS && ny >= 0 && ny < ROWS) {
+                        if (grid[ny][nx] === 0) {
+                            validDirs.push(d);
+                        }
+                    }
+                }
+
+                let chosenDir = null;
+                if (targetDir && validDirs.includes(targetDir)) {
+                    chosenDir = targetDir;
+                } else if (validDirs.length > 0) {
+                    const opp = { UP: 'DOWN', DOWN: 'UP', LEFT: 'RIGHT', RIGHT: 'LEFT' };
+                    let nonOpp = validDirs.filter(d => d !== opp[this.dir]);
+                    if (nonOpp.length > 0) {
+                        chosenDir = nonOpp[Math.floor(Math.random() * nonOpp.length)];
+                    } else {
+                        chosenDir = validDirs[Math.floor(Math.random() * validDirs.length)];
+                    }
+                }
+
+                if (chosenDir) {
+                    this.dir = chosenDir;
+                    this.x += dx[chosenDir];
+                    this.y += dy[chosenDir];
+
+                    let stepKey = `${this.x},${this.y}`;
+                    if (holes[stepKey] && holes[stepKey].stage === 3) {
+                        this.state = 'TRAPPED';
+                        this.trapTimer = 5000; 
+                    }
+                }
+            }
+        }
+
+        // プレイヤーとエイリアンの初期位置・状態のみリセットする関数
+        function restartLife() {
+            player.x = 7;
+            player.y = 13;
+            player.dir = 'UP';
+            player.faceDir = 'RIGHT';
+            player.turnCooldown = 0;
+            player.isMoving = false;
+
+            aliens = [];
+            let alienCount = 2 + level; 
+            const alienColors = ['#FF3333', '#3388FF', '#FFFF33', '#33FF33', '#CC33FF']; 
+
+            for (let i = 0; i < alienCount; i++) {
+                let color = alienColors[i % alienColors.length];
+                aliens.push(new Alien(7, 7, (i + 1) * 1000, color));
+            }
+        }
+
+        function initLevel() {
+            generateLoopMaze();
+            grid[7][7] = 0;
+            
+            restartLife();
+            
+            holes = {};
+            stairs = null; 
+
+            goldItems = [];
+            let goldCount = 5 + level * 2; 
+            let placed = 0;
+            while (placed < goldCount) {
+                let gx = Math.floor(Math.random() * COLS);
+                let gy = Math.floor(Math.random() * ROWS);
+                if (grid[gy][gx] === 0 && !(gx === 7 && gy === 13) && !(gx === 7 && gy === 7) && !goldItems.some(g => g.x === gx && g.y === gy)) {
+                    goldItems.push({ x: gx, y: gy, collected: false });
+                    placed++;
+                }
+            }
+        }
+
+        let keys = {};
+        window.addEventListener('keydown', e => {
+            if (e.key === 'Enter') {
+                if (gameState === 'START') {
+                    gameState = 'PLAYING';
+                    lastTime = performance.now();
+                    requestAnimationFrame(gameLoop);
+                } else if (gameState === 'GAMEOVER') {
+                    score = 0;
+                    lives = 3;
+                    level = 1;
+                    initLevel();
+                    gameState = 'PLAYING';
+                } else if (gameState === 'LEVEL_CLEAR') {
+                    level++;
+                    initLevel();
+                    gameState = 'PLAYING';
+                }
+                return;
+            }
+            if (gameState !== 'PLAYING') return;
+            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'z', 'x', 'Z', 'X'].includes(e.key)) {
+                keys[e.key] = true;
+                e.preventDefault();
+            }
+        });
+        window.addEventListener('keyup', e => {
+            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'z', 'x', 'Z', 'X'].includes(e.key)) {
+                keys[e.key] = false;
+                e.preventDefault();
+            }
+        });
+
+        let moveCooldown = 0;
+        let actionCooldown = 0;
+        const moveIntervalThreshold = 180; 
+        const actionIntervalThreshold = 200; 
+
+        function handleInput(dt) {
+            if (gameState !== 'PLAYING') return;
+            const dx = { UP: 0, DOWN: 0, LEFT: -1, RIGHT: 1 };
+            const dy = { UP: -1, DOWN: 1, LEFT: 0, RIGHT: 0 };
+
+            let inputDir = null;
+            if (keys['ArrowUp']) inputDir = 'UP';
+            else if (keys['ArrowDown']) inputDir = 'DOWN';
+            else if (keys['ArrowLeft']) inputDir = 'LEFT';
+            else if (keys['ArrowRight']) inputDir = 'RIGHT';
+
+            const isDigPressed = keys['z'] || keys['Z'];
+            const isFillPressed = keys['x'] || keys['X'];
+
+            player.isMoving = !!inputDir; 
+            
+            // プレイヤーの顔の向きを更新（左か右）
+            if (inputDir === 'LEFT') player.faceDir = 'LEFT';
+            else if (inputDir === 'RIGHT') player.faceDir = 'RIGHT';
+
+            if (moveCooldown > 0) moveCooldown -= dt;
+            if (actionCooldown > 0) actionCooldown -= dt;
+            if (player.turnCooldown > 0) player.turnCooldown -= dt;
+
+            if (isDigPressed || isFillPressed) {
+                if (inputDir && player.dir !== inputDir) {
+                    player.dir = inputDir;
+                }
+                if (actionCooldown <= 0) {
+                    let targetX = player.x + dx[player.dir];
+                    let targetY = player.y + dy[player.dir];
+                    if (targetX >= 0 && targetX < COLS && targetY >= 0 && targetY < ROWS) {
+                        if (grid[targetY][targetX] === 0) {
+                            let key = `${targetX},${targetY}`;
+                            if (isDigPressed) {
+                                if (!holes[key]) holes[key] = { stage: 1 };
+                                else if (holes[key].stage < 3) holes[key].stage++;
+                                actionCooldown = actionIntervalThreshold;
+                            } 
+                            else if (isFillPressed) {
+                                if (holes[key]) {
+                                    holes[key].stage--;
+                                    if (holes[key].stage <= 0) {
+                                        delete holes[key]; 
+                                    }
+                                    actionCooldown = actionIntervalThreshold;
+                                }
+                            }
+                        }
+                    }
+                }
+                player.isMoving = false; 
+                return; 
+            }
+
+            if (inputDir) {
+                if (player.dir !== inputDir) {
+                    player.dir = inputDir;
+                    player.turnCooldown = 150; 
+                    moveCooldown = moveIntervalThreshold; 
+                    return; 
+                }
+                if (moveCooldown <= 0 && player.turnCooldown <= 0) {
+                    let nx = player.x + dx[inputDir];
+                    let ny = player.y + dy[inputDir];
+                    if (nx >= 0 && nx < COLS && ny >= 0 && ny < ROWS) {
+                        if (grid[ny][nx] === 0) {
+                            let hKey = `${nx},${ny}`;
+                            let hStage = holes[hKey] ? holes[hKey].stage : 0;
+                            if (hStage === 0) {
+                                player.x = nx;
+                                player.y = ny;
+                                moveCooldown = moveIntervalThreshold; 
+                            }
+                        }
+                    }
+                }
+            } else {
+                moveCooldown = 0; 
+            }
+        }
+
+        function update(dt) {
+            handleInput(dt);
+
+            for (let alien of aliens) {
+                alien.update(dt);
+                if (alien.state === 'WALKING' && alien.x === player.x && alien.y === player.y) {
+                    lives--;
+                    if (lives <= 0) {
+                        gameState = "GAMEOVER";
+                    } else {
+                        restartLife();
+                    }
+                    return;
+                }
+            }
+
+            for (let gold of goldItems) {
+                if (!gold.collected && gold.x === player.x && gold.y === player.y) {
+                    gold.collected = true;
+                    score += 200;
+                }
+            }
+
+            if (!stairs && goldItems.length > 0 && goldItems.every(g => g.collected)) {
+                stairs = { x: 7, y: 7 };
+                score += 500; 
+            }
+
+            if (stairs && player.x === stairs.x && player.y === stairs.y) {
+                gameState = "LEVEL_CLEAR";
+                score += 1000;
+            }
+        }
+
+        function draw(now = performance.now()) {
+            ctx.fillStyle = '#000022'; 
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // UI描画
+            ctx.fillStyle = '#FFFF00';
+            ctx.font = 'bold 20px "Courier New", Courier, monospace, sans-serif';
+            ctx.textAlign = 'left';
+            ctx.fillText("スコア: " + score, 20, 28);
+            ctx.textAlign = 'center';
+            ctx.fillText("坑道: " + level, canvas.width / 2, 28);
+            ctx.textAlign = 'right';
+            ctx.fillText("残機: " + lives, canvas.width - 20, 28);
+
+            ctx.save();
+            ctx.translate(0, 40); 
+
+            // エイリアンポータル
+            let showPortal = false;
+            for (let alien of aliens) {
+                if ((alien.state === 'WAITING_SPAWN' && alien.respawnTimer <= 1000) || 
+                    (alien.state === 'WALKING' && alien.portalTimer > 0)) {
+                    showPortal = true;
+                    break;
+                }
+            }
+
+            if (showPortal) {
+                let p_cx = 7 * TILE_SIZE + TILE_SIZE / 2;
+                let p_cy = 7 * TILE_SIZE + TILE_SIZE / 2;
+                ctx.fillStyle = '#110022';
+                ctx.fillRect(7 * TILE_SIZE, 7 * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+                
+                ctx.save();
+                ctx.translate(p_cx, p_cy);
+                ctx.rotate(now / 500); 
+                for(let i = 0; i < 8; i++) {
+                    ctx.rotate(Math.PI / 4);
+                    ctx.fillStyle = (Math.floor(now / 150) % 2 === 0) ? '#FF0000' : '#FF00FF';
+                    ctx.beginPath();
+                    ctx.moveTo(0, 0); ctx.lineTo(8, 16); ctx.lineTo(-8, 16); ctx.fill();
+                }
+                ctx.restore();
+
+                ctx.beginPath();
+                ctx.arc(p_cx, p_cy, 6 + Math.sin(now / 150) * 3, 0, Math.PI * 2); 
+                ctx.fillStyle = '#000000'; ctx.fill();
+                ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 2; ctx.stroke();
+            }
+
+            // 壁描画
+            for (let y = 0; y < ROWS; y++) {
+                for (let x = 0; x < COLS; x++) {
+                    let rx = x * TILE_SIZE;
+                    let ry = y * TILE_SIZE;
+                    if (grid[y][x] === 1) {
+                        ctx.fillStyle = '#003300'; ctx.fillRect(rx, ry, TILE_SIZE, TILE_SIZE);
+                        ctx.fillStyle = '#00CC00';
+                        ctx.fillRect(rx + 1, ry + 1, 18, 12); ctx.fillRect(rx + 21, ry + 1, 18, 12);
+                        ctx.fillRect(rx + 1, ry + 14, 8, 12); ctx.fillRect(rx + 11, ry + 14, 18, 12); ctx.fillRect(rx + 31, ry + 14, 8, 12);
+                        ctx.fillRect(rx + 1, ry + 27, 18, 12); ctx.fillRect(rx + 21, ry + 27, 18, 12);
+
+                        ctx.fillStyle = '#33FF33'; 
+                        ctx.fillRect(rx + 1, ry + 1, 18, 2); ctx.fillRect(rx + 21, ry + 1, 18, 2);
+                        ctx.fillRect(rx + 1, ry + 14, 8, 2); ctx.fillRect(rx + 11, ry + 14, 18, 2); ctx.fillRect(rx + 31, ry + 14, 8, 2);
+                        ctx.fillRect(rx + 1, ry + 27, 18, 2); ctx.fillRect(rx + 21, ry + 27, 18, 2);
+
+                        ctx.fillStyle = '#006600'; 
+                        ctx.fillRect(rx + 1, ry + 11, 18, 2); ctx.fillRect(rx + 21, ry + 11, 18, 2);
+                        ctx.fillRect(rx + 1, ry + 24, 8, 2); ctx.fillRect(rx + 11, ry + 24, 18, 2); ctx.fillRect(rx + 31, ry + 24, 8, 2);
+                        ctx.fillRect(rx + 1, ry + 37, 18, 2); ctx.fillRect(rx + 21, ry + 37, 18, 2);
+                    }
+                }
+            }
+
+            // 階段描画
+            if (stairs) {
+                let sx = stairs.x * TILE_SIZE + TILE_SIZE / 2;
+                let sy = stairs.y * TILE_SIZE + TILE_SIZE / 2;
+                ctx.save();
+                ctx.translate(sx, sy);
+                ctx.fillStyle = '#555555'; ctx.fillRect(-14, -14, 28, 28);
+                ctx.fillStyle = '#888888';
+                for(let i = -10; i <= 6; i += 6) {
+                    ctx.fillRect(-12, i, 24, 4);
+                    ctx.fillStyle = '#333333'; ctx.fillRect(-12, i + 4, 24, 2);
+                    ctx.fillStyle = '#888888';
+                }
+                ctx.restore();
+            }
+
+            // 穴描画
+            for (let key in holes) {
+                let [hx, hy] = key.split(',').map(Number);
+                let stage = holes[key].stage;
+                let cx = hx * TILE_SIZE + TILE_SIZE / 2;
+                let cy = hy * TILE_SIZE + TILE_SIZE / 2;
+                ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 4; 
+                let radius = stage === 1 ? 6 : stage === 2 ? 12 : 16;
+                ctx.beginPath(); ctx.arc(cx, cy, radius, 0, Math.PI * 2); ctx.stroke();
+            }
+
+            // 金塊描画
+            for (let gold of goldItems) {
+                if (!gold.collected) {
+                    ctx.save();
+                    ctx.translate(gold.x * TILE_SIZE + TILE_SIZE / 2, gold.y * TILE_SIZE + TILE_SIZE / 2);
+                    ctx.rotate(-Math.PI / 8); 
+                    ctx.fillStyle = '#B8860B'; ctx.fillRect(-10, -4, 24, 14); 
+                    ctx.fillStyle = '#DAA520'; ctx.fillRect(-12, -6, 24, 14);
+                    ctx.fillStyle = '#FFDF00'; ctx.fillRect(-10, -4, 20, 10);
+                    ctx.fillStyle = '#FFFFFF'; ctx.fillRect(-8, -2, 14, 2); ctx.fillRect(-8, -2, 2, 6);  
+                    ctx.restore();
+                }
+            }
+
+            let px = player.x * TILE_SIZE + TILE_SIZE / 2;
+            let py = player.y * TILE_SIZE + TILE_SIZE / 2;
+            
+            // アニメーションフレームの決定
+            let activeFrame = pStand;
+            if (player.isMoving) {
+                let moveTime = Math.floor(now / 150);
+                activeFrame = (moveTime % 2 === 0) ? pStand : pWalk;
+            }
+
+            ctx.save();
+            ctx.translate(px, py);
+            
+            // 左向きならキャンバスを反転
+            if (player.faceDir === 'LEFT') {
+                ctx.scale(-1, 1);
+            }
+
+            const pixelScale = 2.4; // 40pxマスに14x16のドットを収めるスケール
+            const gridWidth = activeFrame[0].length;
+            const gridHeight = activeFrame.length;
+            const offsetX = -(gridWidth * pixelScale) / 2;
+            const offsetY = -(gridHeight * pixelScale) / 2;
+
+            for (let y = 0; y < gridHeight; y++) {
+                for (let x = 0; x < gridWidth; x++) {
+                    const char = activeFrame[y][x];
+                    if (char !== '.') {
+                        ctx.fillStyle = palette[char];
+                        // 1ピクセルの隙間をなくすため幅と高さを少し足す
+                        ctx.fillRect(offsetX + x * pixelScale, offsetY + y * pixelScale, pixelScale + 0.5, pixelScale + 0.5);
+                    }
+                }
+            }
+            ctx.restore();
+
+            for (let alien of aliens) {
+                if (alien.state === 'WAITING_SPAWN') continue;
+                let ax = alien.x * TILE_SIZE + TILE_SIZE / 2;
+                let ay = alien.y * TILE_SIZE + TILE_SIZE / 2;
+                let isTrapped = alien.state === 'TRAPPED';
+                
+                ctx.save();
+                ctx.translate(ax, ay);
+                if (isTrapped) ctx.scale(0.8, 0.6); 
+
+                // おばけ本体（右側に流れる尻尾）
+                ctx.fillStyle = alien.color;
+                ctx.beginPath();
+                ctx.arc(-2, -2, 13, Math.PI, 0, false); 
+                let tailSway = Math.sin(now / 200) * 2;
+                ctx.quadraticCurveTo(11, 10, 16 + tailSway, 16); 
+                ctx.bezierCurveTo(4, 18, -10, 16, -15, 6);
+                ctx.closePath();
+                ctx.fill();
+
+                // 縦長の楕円の目
+                ctx.fillStyle = '#000000';
+                ctx.beginPath(); ctx.ellipse(-6, -4, 2, 3.5, 0, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.ellipse(3, -4, 2, 3.5, 0, 0, Math.PI * 2); ctx.fill();
+
+                // U字の手
+                ctx.strokeStyle = '#000000'; ctx.lineWidth = 1.5; ctx.lineCap = 'round';
+                ctx.beginPath(); ctx.arc(-7, 5, 1.5, 0, Math.PI, false); ctx.stroke();
+                ctx.beginPath(); ctx.arc(4, 5, 1.5, 0, Math.PI, false); ctx.stroke();
+
+                ctx.restore();
+            }
+
+            ctx.restore(); // map offset restore
+
+            if (gameState === "START") {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#00FF00'; ctx.font = 'bold 40px "Courier New", Courier, monospace, sans-serif'; ctx.textAlign = 'center';
+                ctx.fillText("埋蔵金坑道", canvas.width / 2, canvas.height / 2 - 30);
+                ctx.fillStyle = '#FFFF00'; ctx.font = '24px "Courier New", Courier, monospace, sans-serif';
+                ctx.fillText("ENTERキーを押してスタート", canvas.width / 2, canvas.height / 2 + 20);
+                ctx.fillStyle = '#FFFFFF'; ctx.font = '16px "Courier New", Courier, monospace, sans-serif';
+                ctx.fillText("Z: 掘る  X: 埋める  矢印: 移動", canvas.width / 2, canvas.height / 2 + 60);
+            } else if (gameState === "GAMEOVER") {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#FF0000'; ctx.font = 'bold 40px "Courier New", Courier, monospace, sans-serif'; ctx.textAlign = 'center';
+                ctx.fillText("ゲームオーバー", canvas.width / 2, canvas.height / 2 - 10);
+                ctx.fillStyle = '#FFFF00'; ctx.font = '24px "Courier New", Courier, monospace, sans-serif';
+                ctx.fillText("ENTERキーを押してリトライ", canvas.width / 2, canvas.height / 2 + 40);
+            } else if (gameState === "LEVEL_CLEAR") {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#00FF00'; ctx.font = 'bold 40px "Courier New", Courier, monospace, sans-serif'; ctx.textAlign = 'center';
+                ctx.fillText("次の坑道へ下降中...", canvas.width / 2, canvas.height / 2 - 10);
+                ctx.fillStyle = '#FFFF00'; ctx.font = '24px "Courier New", Courier, monospace, sans-serif';
+                ctx.fillText("ENTERキーで次の坑道へ", canvas.width / 2, canvas.height / 2 + 40);
+            }
+        }
+
+        let lastTime = performance.now();
+        function gameLoop(now) {
+            let dt = now - lastTime;
+            lastTime = now;
+            if (gameState === "PLAYING") {
+                update(dt);
+            }
+            draw(now); 
+            requestAnimationFrame(gameLoop);
+        }
+
+        initLevel();
+        requestAnimationFrame(gameLoop);
+    </script>
+</body>
+</html>

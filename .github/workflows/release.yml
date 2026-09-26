@@ -1,0 +1,29 @@
+name: release
+on:
+  push:
+    tags: ['v*']
+jobs:
+  build-dmg:
+    runs-on: macos-latest   # Apple Silicon（arm64）のランナー
+    permissions:
+      contents: write       # リリースの作成に必要
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+      - run: npm ci
+      - run: npm test
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'Buried Treasure Tunnel ${{ github.ref_name }}'
+          releaseBody: 'インストール手順と Gatekeeper の許可方法は README を参照してください。'
+          releaseDraft: true
