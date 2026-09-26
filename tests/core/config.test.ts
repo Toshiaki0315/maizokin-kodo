@@ -30,6 +30,10 @@ import {
   PORTAL_POST_SPAWN_MS,
   PORTAL_PRE_SPAWN_MS,
   RESPAWN_DELAY_MS,
+  SCORE_ALIEN_KILLED,
+  SCORE_GOLD,
+  SCORE_LEVEL_CLEAR,
+  SCORE_STAIRS_APPEARED,
   ROWS,
   STATUS_BAR_HEIGHT,
   TILE_SIZE,
@@ -229,5 +233,14 @@ describe('config：方向（仕様 3章・5.3・8.4）', () => {
 
   it('逆方向（エイリアンの逆走防止に使う、仕様 8.4）', () => {
     expect(OPPOSITE_DIR).toEqual({ UP: 'DOWN', DOWN: 'UP', LEFT: 'RIGHT', RIGHT: 'LEFT' });
+  });
+});
+
+describe('config：スコア（仕様 10.2）', () => {
+  it('撃破 +100、金塊 +200、階段出現 +500、レベルクリア +1000', () => {
+    expect(SCORE_ALIEN_KILLED).toBe(100);
+    expect(SCORE_GOLD).toBe(200);
+    expect(SCORE_STAIRS_APPEARED).toBe(500);
+    expect(SCORE_LEVEL_CLEAR).toBe(1000);
   });
 });

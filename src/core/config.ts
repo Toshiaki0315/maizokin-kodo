@@ -132,6 +132,17 @@ export function goldCount(level: number): number {
   return 5 + level * 2;
 }
 
+// ---- スコア（仕様 10.2） ----
+
+/** エイリアンを倒した */
+export const SCORE_ALIEN_KILLED = 100;
+/** 金塊を1個取った */
+export const SCORE_GOLD = 200;
+/** 金塊をすべて取って階段が出た（1レベル1回） */
+export const SCORE_STAIRS_APPEARED = 500;
+/** 階段に着いてレベルクリア */
+export const SCORE_LEVEL_CLEAR = 1000;
+
 // ---- ループとミス演出（デスクトップ版、仕様 2章・14.3・16.5） ----
 
 /** ロジック更新の固定タイムステップ（1/60 秒） */
