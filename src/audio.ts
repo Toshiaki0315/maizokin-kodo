@@ -143,6 +143,10 @@ export class Sound {
       case 'stairsAppeared':
         this.playArpeggio(['A4', 'C#5', 'E5', 'A5'], 0.11, 0.4, 0.35);
         break;
+      case 'levelCleared':
+        // 階段のファンファーレより長く華やかに（ド・ミ・ソ・ド・ミ〜）
+        this.playArpeggio(['C5', 'E5', 'G5', 'C6', 'E6'], 0.12, 0.4, 0.7);
+        break;
       case 'miss':
         this.playMiss();
         break;
