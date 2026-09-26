@@ -172,6 +172,9 @@ describe('LEVEL_CLEAR（仕様 4章・9.3・16.1・16.7）', () => {
     const game = playingGame();
     clearLevel(game); // 階段へ移動した直後なので移動のクールダウンが残っている
     game.step(FIXED_STEP_MS, ENTER);
+    // 新しい迷路では真上が壁のこともあるので、通路だけの盤面にしてから確かめる
+    game.grid = openGrid();
+    game.aliens = [];
     game.step(FIXED_STEP_MS, UP);
     expect(position(game.player)).toEqual({ x: 7, y: 12 });
   });
