@@ -8,8 +8,12 @@ import {
   BOARD_WIDTH,
   CANVAS_HEIGHT,
   CANVAS_WIDTH,
+  ALIEN_COLORS,
   COLS,
+  DIRS,
+  DIR_VECTORS,
   DISPLAY_SCALE,
+  OPPOSITE_DIR,
   FIXED_STEP_MS,
   HOLE_MAX_STAGE,
   INITIAL_HI_SCORE,
@@ -196,5 +200,34 @@ describe('config：デスクトップ版のループとミス演出', () => {
   it('赤フラッシュは不透明度 0.35 から 300ms で 0 まで（仕様 2章・16.5）', () => {
     expect(MISS_FLASH_MS).toBe(300);
     expect(MISS_FLASH_ALPHA).toBe(0.35);
+  });
+});
+
+describe('config：エイリアンの色（仕様 8.1）', () => {
+  it('赤・青・黄・緑・紫の5色を、この順で循環させる', () => {
+    expect(ALIEN_COLORS).toEqual(['#FF3333', '#3388FF', '#FFFF33', '#33FF33', '#CC33FF']);
+  });
+
+  it('色の数はエイリアン数の上限と同じで、同じレベルのエイリアンの色は重ならない（仕様 13.1 #4）', () => {
+    expect(ALIEN_COLORS).toHaveLength(MAX_ALIENS);
+  });
+});
+
+describe('config：方向（仕様 3章・5.3・8.4）', () => {
+  it('4方向は 上・下・左・右 の順（原作の方向配列の順、乱数で選ぶときの順序に使う）', () => {
+    expect(DIRS).toEqual(['UP', 'DOWN', 'LEFT', 'RIGHT']);
+  });
+
+  it('方向ごとの移動量：x は右が正、y は下が正（仕様 3章）', () => {
+    expect(DIR_VECTORS).toEqual({
+      UP: { x: 0, y: -1 },
+      DOWN: { x: 0, y: 1 },
+      LEFT: { x: -1, y: 0 },
+      RIGHT: { x: 1, y: 0 },
+    });
+  });
+
+  it('逆方向（エイリアンの逆走防止に使う、仕様 8.4）', () => {
+    expect(OPPOSITE_DIR).toEqual({ UP: 'DOWN', DOWN: 'UP', LEFT: 'RIGHT', RIGHT: 'LEFT' });
   });
 });

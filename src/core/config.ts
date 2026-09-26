@@ -7,6 +7,9 @@ export interface Point {
   readonly y: number;
 }
 
+/** 向き（仕様 5.2・14.5） */
+export type Dir = 'UP' | 'DOWN' | 'LEFT' | 'RIGHT';
+
 // ---- 盤面と画面（仕様 2章・3章・16.4） ----
 
 /** グリッドの列数（原作 COLS） */
@@ -36,6 +39,25 @@ export const DISPLAY_SCALE = 1.5;
 export const PLAYER_START: Point = Object.freeze({ x: 7, y: 13 });
 /** ポータル／階段の位置。盤面中央で、エイリアンの出現点でもある */
 export const PORTAL_POS: Point = Object.freeze({ x: 7, y: 7 });
+
+// ---- 方向（仕様 3章・5.3・8.4） ----
+
+/** 4方向。原作の方向配列と同じ順にし、乱数で方向を選ぶときの順序を原作とそろえる */
+export const DIRS: readonly Dir[] = ['UP', 'DOWN', 'LEFT', 'RIGHT'];
+/** 方向ごとの1マスの移動量。x は右が正、y は下が正（3章） */
+export const DIR_VECTORS: Readonly<Record<Dir, Point>> = {
+  UP: { x: 0, y: -1 },
+  DOWN: { x: 0, y: 1 },
+  LEFT: { x: -1, y: 0 },
+  RIGHT: { x: 1, y: 0 },
+};
+/** 逆方向。エイリアンの逆走防止に使う（8.4） */
+export const OPPOSITE_DIR: Readonly<Record<Dir, Dir>> = {
+  UP: 'DOWN',
+  DOWN: 'UP',
+  LEFT: 'RIGHT',
+  RIGHT: 'LEFT',
+};
 
 // ---- プレイヤー操作（仕様 2章・5章） ----
 
@@ -69,6 +91,8 @@ export const ALIEN_MOVE_INTERVAL_STEP_MS = 20;
 export const ALIEN_MIN_MOVE_INTERVAL_MS = 250;
 /** エイリアン数の上限。原作は上限なし（13.1 #4 で最大5体を採用） */
 export const MAX_ALIENS = 5;
+/** エイリアンの色。i 番目は i % 5 で循環する（8.1） */
+export const ALIEN_COLORS: readonly string[] = ['#FF3333', '#3388FF', '#FFFF33', '#33FF33', '#CC33FF'];
 
 /** i 番目（0始まり）のエイリアンの初回出現遅延（仕様 2章） */
 export function initialSpawnDelay(index: number): number {
