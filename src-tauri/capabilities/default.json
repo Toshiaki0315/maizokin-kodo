@@ -1,13 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capability for the main window",
-  "windows": [
-    "main"
-  ],
-  "permissions": [
-    "core:default",
-    "opener:default",
-    "store:default"
-  ]
+  "description": "メインウィンドウの権限（仕様 16.9：最小限にする）",
+  "windows": ["main"],
+  "permissions": ["core:default", "core:window:allow-destroy", "store:default"]
 }
