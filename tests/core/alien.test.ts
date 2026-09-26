@@ -16,6 +16,7 @@ function context(overrides: Partial<AlienContext> = {}): AlienContext {
     holes: new Holes(),
     player: FAR_AWAY,
     stairsVisible: false,
+    aliens: [],
     ...overrides,
   };
 }
@@ -502,5 +503,93 @@ describe('isPortalShown：ポータルを表示するか（仕様 12.3・16.13�
     justSpawned.update(1000, context());
     expect(isPortalShown([waiting, justSpawned], false)).toBe(true);
     expect(isPortalShown([waiting, justSpawned], true)).toBe(false);
+  });
+});
+
+// ---- お化け同士を重ならせない（仕様 8.4 手順2・8.3 手順1、デスクトップ版で追加） ----
+
+function position(p: Point): Point {
+  return { x: p.x, y: p.y };
+}
+
+describe('お化け同士が重ならない（仕様 8.4 手順2）', () => {
+  // 横一本道 (2,5)〜(5,5)
+  const corridor = () => closedGrid([2, 3, 4, 5].map((x) => ({ x, y: 5 })));
+
+  it('ほかのお化けがいるマスへは進まない。ほかに道がなければ逆向きに戻る', () => {
+    const mover = walkingAlien(3, 5, 'RIGHT');
+    const blocker = walkingAlien(4, 5, 'RIGHT');
+    moveOnce(mover, context({ grid: corridor(), aliens: [mover, blocker] }));
+    expect({ x: mover.x, dir: mover.dir }).toEqual({ x: 2, dir: 'LEFT' });
+  });
+
+  it('捕獲中のお化けがいるマスへも進まない', () => {
+    const mover = walkingAlien(3, 5, 'RIGHT');
+    const trapped = walkingAlien(4, 5);
+    trapped.state = 'TRAPPED';
+    moveOnce(mover, context({ grid: corridor(), aliens: [mover, trapped] }));
+    expect(mover.x).toBe(2);
+  });
+
+  it.each(['WAITING_SPAWN', 'DEAD'] as const)('%s のお化けは座標が残っていても邪魔にならない', (state) => {
+    const mover = walkingAlien(3, 5, 'RIGHT');
+    const ghost = walkingAlien(4, 5);
+    ghost.state = state;
+    moveOnce(mover, context({ grid: corridor(), aliens: [mover, ghost] }));
+    expect(mover.x).toBe(4);
+  });
+
+  it('追跡する方向がふさがれていれば、ほかの方向へ進む', () => {
+    // プレイヤーは真上。上のマスには別のお化けがいる
+    const mover = walkingAlien(7, 7, 'LEFT', sequenceRng(0));
+    const blocker = walkingAlien(7, 6);
+    moveOnce(mover, context({ player: { x: 7, y: 2 }, aliens: [mover, blocker] }));
+    expect(position(mover)).not.toEqual({ x: 7, y: 6 });
+    expect(mover.dir).not.toBe('UP');
+  });
+
+  it('四方がお化けと壁でふさがれていれば、その場にとどまる', () => {
+    const mover = walkingAlien(3, 5, 'RIGHT');
+    const left = walkingAlien(2, 5);
+    const right = walkingAlien(4, 5);
+    moveOnce(mover, context({ grid: corridor(), aliens: [left, mover, right] }));
+    expect({ x: mover.x, dir: mover.dir }).toEqual({ x: 3, dir: 'RIGHT' });
+  });
+
+  it('同じステップで先に動いたお化けの新しい位置も避ける（同じマスに2体が入らない）', () => {
+    // (2,5)〜(4,5) の一本道。左のお化けは右へ、右のお化けは左へしか行けない。先に動いた方だけが真ん中に入る
+    const grid = closedGrid([2, 3, 4].map((x) => ({ x, y: 5 })));
+    const a = walkingAlien(2, 5, 'RIGHT');
+    const b = walkingAlien(4, 5, 'LEFT');
+    const ctx = context({ grid, aliens: [a, b] });
+    moveOnce(a, ctx);
+    moveOnce(b, ctx);
+    expect(position(a)).toEqual({ x: 3, y: 5 });
+    expect(position(b)).toEqual({ x: 4, y: 5 });
+  });
+
+  it('5体を長く歩かせても、歩いているお化け同士が同じマスに重ならない', () => {
+    const aliens = createAliens(5, createRng(42));
+    const ctx = context({ aliens });
+    for (let step = 0; step < 6000; step++) {
+      for (const alien of aliens) alien.update(FIXED_STEP_MS, ctx);
+      const cells = aliens.filter((a) => a.state === 'WALKING' || a.state === 'TRAPPED').map((a) => `${a.x},${a.y}`);
+      expect(new Set(cells).size, `step=${step}`).toBe(cells.length);
+    }
+  });
+});
+
+describe('出現はポータルが空くまで待つ（仕様 8.3 手順1）', () => {
+  it('ポータル (7,7) にほかのお化けがいる間は出現せず、どいたら出現する', () => {
+    const waiting = new Alien(sequenceRng(0), 100, '#3388FF', 450);
+    const sitter = walkingAlien(PORTAL_POS.x, PORTAL_POS.y);
+    sitter.moveTimer = -100000; // 動かないようにしておく
+    const ctx = context({ aliens: [sitter, waiting] });
+    waiting.update(200, ctx);
+    expect(waiting.state).toBe('WAITING_SPAWN');
+    sitter.x = 3;
+    waiting.update(FIXED_STEP_MS, ctx);
+    expect(waiting.state).toBe('WALKING');
+    expect(position(waiting)).toEqual(PORTAL_POS);
   });
 });
