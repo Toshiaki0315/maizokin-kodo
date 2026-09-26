@@ -11,6 +11,10 @@ import {
   PLAYER_START,
   PORTAL_POS,
   ROWS,
+  SCORE_ALIEN_KILLED,
+  SCORE_GOLD,
+  SCORE_LEVEL_CLEAR,
+  SCORE_STAIRS_APPEARED,
   TURN_COOLDOWN_MS,
   goldCount,
   type Dir,
@@ -224,7 +228,7 @@ export class Game {
   private update(dt: number, input: InputSnapshot, events: GameEvent[]): void {
     // すれ違いの判定のため、動く前のプレイヤーの位置を記録する（16.14）
     const playerBefore = { x: this.player.x, y: this.player.y };
-    this.handleInput(dt, input);
+    this.handleInput(dt, input, events);
 
     const ctx = {
       grid: this.grid,
@@ -236,11 +240,12 @@ export class Game {
     for (const alien of this.aliens) {
       const before = { x: alien.x, y: alien.y, state: alien.state };
       if (alien.update(dt, ctx) === 'killed') {
-        this.score += 100;
+        this.score += SCORE_ALIEN_KILLED;
+        events.push({ type: 'alienKilled', x: alien.x, y: alien.y, color: alien.color });
       }
       if (this.collides(alien, before, playerBefore)) {
         // ミスしたらそのステップの残り（残りのエイリアン・金塊・階段）を打ち切る（10.1）
-        this.startMiss();
+        this.startMiss(events);
         return;
       }
     }
@@ -249,20 +254,22 @@ export class Game {
     for (const gold of this.gold) {
       if (!gold.collected && gold.x === this.player.x && gold.y === this.player.y) {
         gold.collected = true;
-        this.score += 200;
+        this.score += SCORE_GOLD;
+        events.push({ type: 'goldCollected', x: gold.x, y: gold.y });
       }
     }
 
     // 手順4：全金塊を取った最初のステップで階段を出す（1レベル1回）
     if (this.stairs === null && this.gold.length > 0 && this.gold.every((g) => g.collected)) {
       this.stairs = { x: PORTAL_POS.x, y: PORTAL_POS.y };
-      this.score += 500;
+      this.score += SCORE_STAIRS_APPEARED;
+      events.push({ type: 'stairsAppeared' });
     }
 
     // 手順5：階段に乗ったらクリア
     if (this.stairs !== null && this.player.x === this.stairs.x && this.player.y === this.stairs.y) {
       this._state = 'LEVEL_CLEAR';
-      this.score += 1000;
+      this.score += SCORE_LEVEL_CLEAR;
       this.saveHiScoreIfNeeded(events);
     }
   }
@@ -290,7 +297,8 @@ export class Game {
   }
 
   /** ミスした瞬間に残機を減らし、MISS に入る（16.5） */
-  private startMiss(): void {
+  private startMiss(events: GameEvent[]): void {
+    events.push({ type: 'miss' });
     this.lives -= 1;
     this._missElapsedMs = 0;
     this._state = 'MISS';
@@ -355,7 +363,7 @@ export class Game {
   }
 
   /** プレイヤーの移動・掘る・埋める（5.3） */
-  private handleInput(dt: number, input: InputSnapshot): void {
+  private handleInput(dt: number, input: InputSnapshot, events: GameEvent[]): void {
     const player = this.player;
     const inputDir = input.dir;
     player.isMoving = inputDir !== null;
@@ -374,10 +382,13 @@ export class Game {
         // 前方が壁・盤面外なら何もせず、クールダウンも付けない
         if (this.isPath(tx, ty)) {
           if (input.dig) {
-            this.holes.dig(tx, ty);
+            const before = this.holes.stageAt(tx, ty);
+            // stage 3 で深さが変わらなくてもクールダウンは付く。イベントは深くなったときだけ返す
+            if (this.holes.dig(tx, ty) > before) events.push({ type: 'holeDug', x: tx, y: ty });
             this.actionCooldown = ACTION_INTERVAL_THRESHOLD_MS;
           } else if (this.holes.fill(tx, ty)) {
             // 穴がなければ何もせず、クールダウンも付けない
+            events.push({ type: 'holeFilled', x: tx, y: ty });
             this.actionCooldown = ACTION_INTERVAL_THRESHOLD_MS;
           }
         }
