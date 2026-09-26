@@ -230,3 +230,30 @@ describe('埋める（仕様 5.3 手順5・7章）', () => {
     expect(position(game.player)).toEqual({ x: 7, y: 12 });
   });
 });
+
+describe('掘る・埋めるの絵を出す時間（仕様 16.16）', () => {
+  it('掘ってから 200ms の間は isActing が真', () => {
+    const game = playingGame();
+    expect(game.isActing).toBe(false);
+    game.step(16, DIG);
+    expect(game.isActing).toBe(true);
+    game.step(150, NO_INPUT);
+    expect(game.isActing).toBe(true);
+    game.step(50, NO_INPUT);
+    expect(game.isActing).toBe(false);
+  });
+
+  it('埋めてからも 200ms の間は真', () => {
+    const game = playingGame();
+    game.holes.dig(7, 12);
+    game.step(16, FILL);
+    expect(game.isActing).toBe(true);
+  });
+
+  it('壁に向かって掘ろうとしただけ（実行されていない）なら偽', () => {
+    const game = playingGame();
+    game.grid = openGrid([{ x: 7, y: 12 }]);
+    game.step(16, DIG);
+    expect(game.isActing).toBe(false);
+  });
+});
