@@ -242,6 +242,13 @@ describe('移動AI：追跡（仕様 8.4 手順1）', () => {
     expect(alien.dir).not.toBe('UP');
   });
 
+  it('同じ行でも、間に壁があれば追跡しない（仕様 8.4 手順1）', () => {
+    // (5,7) の壁で左の視線が切れる。向きは RIGHT なので逆走防止で LEFT も候補から外れ、上下右から選ぶ
+    const alien = walkingAlien(7, 7, 'RIGHT', sequenceRng(0));
+    moveOnce(alien, context({ grid: openGrid([{ x: 5, y: 7 }]), player: { x: 2, y: 7 } }));
+    expect(alien.dir).not.toBe('LEFT');
+  });
+
   it('穴は視線を遮らない（仕様 8.4 手順1）', () => {
     const holes = new Holes();
     holes.dig(7, 5);
