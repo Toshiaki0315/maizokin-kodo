@@ -125,10 +125,30 @@ export class Sound {
     this.master.gain.setTargetAtTime(enabled ? MASTER_VOLUME : 0, this.ctx.currentTime, 0.02);
   }
 
-  /** ゲームの出来事に合わせて効果音を鳴らす。穴を掘ったときと埋めたときだけ */
+  /** ゲームの出来事に合わせて効果音を鳴らす（16.18 の表） */
   handleEvent(event: GameEvent): void {
-    if (event.type === 'holeDug') this.playDig();
-    else if (event.type === 'holeFilled') this.playFill();
+    switch (event.type) {
+      case 'holeDug':
+        this.playDig();
+        break;
+      case 'holeFilled':
+        this.playFill();
+        break;
+      case 'goldCollected':
+        this.playArpeggio(['E6', 'B6'], 0.07, 0.35);
+        break;
+      case 'alienKilled':
+        this.playArpeggio(['C5', 'E5', 'G5', 'C6'], 0.06, 0.4);
+        break;
+      case 'stairsAppeared':
+        this.playArpeggio(['A4', 'C#5', 'E5', 'A5'], 0.11, 0.4, 0.35);
+        break;
+      case 'miss':
+        this.playMiss();
+        break;
+      default:
+        break;
+    }
   }
 
   /** BGM はプレイ中だけ鳴らす。それ以外では止め、再開したら続きから鳴らす */
@@ -192,6 +212,43 @@ export class Sound {
     osc.connect(gain).connect(this.effects);
     osc.start(t);
     osc.stop(t + 0.13);
+  }
+
+  /**
+   * 音を順に短く鳴らす（金塊・撃破・階段）。
+   * lastHold を指定すると、最後の音だけその長さ（秒）伸ばす
+   */
+  private playArpeggio(notes: readonly string[], stepSeconds: number, volume: number, lastHold = 0): void {
+    const t = this.ctx.currentTime;
+    notes.forEach((note, i) => {
+      const isLast = i === notes.length - 1;
+      const duration = isLast && lastHold > 0 ? lastHold : stepSeconds * 0.9;
+      this.tone('square', frequency(note), t + i * stepSeconds, duration, volume, this.effects);
+    });
+  }
+
+  /** ミスの音：音程が 700Hz から 90Hz へ、揺れながら下がっていく（約0.6秒） */
+  private playMiss(): void {
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    // 下がりながら震えるよう、低い周波数の揺れを音程に足す
+    const wobble = this.ctx.createOscillator();
+    const wobbleDepth = this.ctx.createGain();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(700, t);
+    osc.frequency.exponentialRampToValueAtTime(90, t + 0.6);
+    wobble.frequency.value = 18;
+    wobbleDepth.gain.value = 30;
+    wobble.connect(wobbleDepth).connect(osc.frequency);
+    gain.gain.setValueAtTime(0.35, t);
+    gain.gain.linearRampToValueAtTime(0.3, t + 0.5);
+    gain.gain.linearRampToValueAtTime(0, t + 0.65);
+    osc.connect(gain).connect(this.effects);
+    osc.start(t);
+    wobble.start(t);
+    osc.stop(t + 0.66);
+    wobble.stop(t + 0.66);
   }
 
   private tone(type: OscillatorType, hz: number, time: number, duration: number, volume: number, out: AudioNode): void {
