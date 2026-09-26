@@ -20,7 +20,7 @@ import type { InputSnapshot } from './input';
 import { generateMaze, PATH, type Grid } from './maze';
 import { shuffle, type Rng } from './rng';
 
-export type GameState = 'START' | 'PLAYING' | 'MISS' | 'LEVEL_CLEAR' | 'GAMEOVER';
+export type GameState = 'START' | 'PLAYING' | 'PAUSED' | 'MISS' | 'LEVEL_CLEAR' | 'GAMEOVER' | 'QUIT_CONFIRM';
 
 /** step() が返すイベント（14.5） */
 export type GameEvent =
@@ -91,6 +91,12 @@ export class Game {
   player: Player = Game.initialPlayer();
 
   private _missElapsedMs = 0;
+  /** PAUSED から P で戻る先（16.1） */
+  private pauseReturn: 'PLAYING' | 'MISS' = 'PLAYING';
+  /** QUIT_CONFIRM に入る前の状態。取り消し時の戻り先を決める（16.1） */
+  private quitReturn: GameState = 'START';
+  /** 終了を確定したか。確定後は何も受け付けない */
+  private quitting = false;
 
   // 移動と掘る・埋めるの連続入力間隔（原作ではグローバル変数、5.3）
   private moveCooldown = 0;
@@ -117,15 +123,35 @@ export class Game {
   /** 固定ステップ1回分進める（14.5）。状態に関係なく毎ステップ呼ぶ */
   step(dtMs: number, input: InputSnapshot): GameEvent[] {
     const events: GameEvent[] = [];
+    // ESC はどの状態からでも終了確認に入れる（16.3）。QUIT_CONFIRM 中の ESC は取り消し
+    if (input.escape && this._state !== 'QUIT_CONFIRM') {
+      this.openQuitConfirm();
+      return events;
+    }
     switch (this._state) {
       case 'START':
         if (input.enter) this._state = 'PLAYING';
         break;
       case 'PLAYING':
-        this.update(dtMs, input, events);
+        if (input.pause) {
+          this.pause('PLAYING');
+        } else {
+          this.update(dtMs, input, events);
+        }
+        break;
+      case 'PAUSED':
+        // ロジックは止め、P だけ受け付ける。Enter は無視する（16.2）
+        if (input.pause) {
+          this._state = this.pauseReturn;
+          this.resetInput(events);
+        }
         break;
       case 'MISS':
+        // P と Enter は無視する（16.5）
         this.updateMiss(dtMs, events);
+        break;
+      case 'QUIT_CONFIRM':
+        this.updateQuitConfirm(input, events);
         break;
       case 'LEVEL_CLEAR':
         // クリアした瞬間の盤面のまま止め、Enter で次の坑道へ（4章）
@@ -139,6 +165,44 @@ export class Game {
         break;
     }
     return events;
+  }
+
+  /** ウィンドウのフォーカスが外れた。PLAYING・MISS 中なら PAUSED にする（16.2） */
+  focusLost(): void {
+    if (this._state === 'PLAYING' || this._state === 'MISS') this.pause(this._state);
+  }
+
+  /** ×ボタン・⌘Q。どの状態からでも QUIT_CONFIRM にする（16.3） */
+  closeRequested(): void {
+    this.openQuitConfirm();
+  }
+
+  private pause(from: 'PLAYING' | 'MISS'): void {
+    this.pauseReturn = from;
+    this._state = 'PAUSED';
+  }
+
+  /** QUIT_CONFIRM 中にもう一度来ても、確認画面と取り消し先はそのまま（16.3） */
+  private openQuitConfirm(): void {
+    if (this._state === 'QUIT_CONFIRM') return;
+    this.quitReturn = this._state;
+    this._state = 'QUIT_CONFIRM';
+  }
+
+  /** Enter で終了を確定し、ESC で取り消す（16.3） */
+  private updateQuitConfirm(input: InputSnapshot, events: GameEvent[]): void {
+    if (this.quitting) return;
+    if (input.enter) {
+      this.quitting = true;
+      events.push({ type: 'quit' });
+    } else if (input.escape) {
+      // PLAYING から来たときは、すぐ再開せず PAUSED で止める。ほかは元の状態へ（16.1 の表）
+      if (this.quitReturn === 'PLAYING') {
+        this.pause('PLAYING');
+      } else {
+        this._state = this.quitReturn;
+      }
+    }
   }
 
   /** PLAYING 中のロジック更新（11章） */
