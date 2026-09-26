@@ -6,6 +6,7 @@ import {
   COLS,
   DIR_VECTORS,
   INITIAL_LIVES,
+  MISS_DURATION_MS,
   MOVE_INTERVAL_THRESHOLD_MS,
   PLAYER_START,
   PORTAL_POS,
@@ -19,7 +20,7 @@ import type { InputSnapshot } from './input';
 import { generateMaze, PATH, type Grid } from './maze';
 import { shuffle, type Rng } from './rng';
 
-export type GameState = 'START' | 'PLAYING' | 'LEVEL_CLEAR' | 'GAMEOVER';
+export type GameState = 'START' | 'PLAYING' | 'MISS' | 'LEVEL_CLEAR' | 'GAMEOVER';
 
 /** step() が返すイベント（14.5） */
 export type GameEvent =
@@ -89,6 +90,8 @@ export class Game {
   stairs: { x: number; y: number } | null = null;
   player: Player = Game.initialPlayer();
 
+  private _missElapsedMs = 0;
+
   // 移動と掘る・埋めるの連続入力間隔（原作ではグローバル変数、5.3）
   private moveCooldown = 0;
   private actionCooldown = 0;
@@ -106,6 +109,11 @@ export class Game {
     return this._state;
   }
 
+  /** MISS に入ってからの経過時間。点滅と赤フラッシュの描画に使う（16.5） */
+  get missElapsedMs(): number {
+    return this._missElapsedMs;
+  }
+
   /** 固定ステップ1回分進める（14.5）。状態に関係なく毎ステップ呼ぶ */
   step(dtMs: number, input: InputSnapshot): GameEvent[] {
     const events: GameEvent[] = [];
@@ -116,9 +124,16 @@ export class Game {
       case 'PLAYING':
         this.update(dtMs, input, events);
         break;
+      case 'MISS':
+        this.updateMiss(dtMs, events);
+        break;
       case 'LEVEL_CLEAR':
         // クリアした瞬間の盤面のまま止め、Enter で次の坑道へ（4章）
         if (input.enter) this.nextLevel(events);
+        break;
+      case 'GAMEOVER':
+        // タイトルに戻らず、level 1 の新しいゲームを始める（4章）
+        if (input.enter) this.retry(events);
         break;
       default:
         break;
@@ -128,6 +143,8 @@ export class Game {
 
   /** PLAYING 中のロジック更新（11章） */
   private update(dt: number, input: InputSnapshot, _events: GameEvent[]): void {
+    // すれ違いの判定のため、動く前のプレイヤーの位置を記録する（16.14）
+    const playerBefore = { x: this.player.x, y: this.player.y };
     this.handleInput(dt, input);
 
     const ctx = {
@@ -136,8 +153,17 @@ export class Game {
       player: this.player,
       stairsVisible: this.stairs !== null,
     };
+    // 手順2：エイリアンを配列順に更新し、1体ごとに直後にミスを判定する
     for (const alien of this.aliens) {
-      alien.update(dt, ctx);
+      const before = { x: alien.x, y: alien.y, state: alien.state };
+      if (alien.update(dt, ctx) === 'killed') {
+        this.score += 100;
+      }
+      if (this.collides(alien, before, playerBefore)) {
+        // ミスしたらそのステップの残り（残りのエイリアン・金塊・階段）を打ち切る（10.1）
+        this.startMiss();
+        return;
+      }
     }
 
     // 手順3：金塊の取得
@@ -159,6 +185,58 @@ export class Game {
       this._state = 'LEVEL_CLEAR';
       this.score += 1000;
     }
+  }
+
+  /**
+   * 歩いているエイリアンとぶつかったか（10.1・16.14）。
+   * 同じマスにいるか、同じステップで互いのマスへ入れ替わったらぶつかったとする。
+   * 出現した瞬間（出現待ちから歩行になったステップ）は移動ではないので、入れ替わりは判定しない
+   */
+  private collides(
+    alien: Alien,
+    before: { x: number; y: number; state: Alien['state'] },
+    playerBefore: { x: number; y: number },
+  ): boolean {
+    if (alien.state !== 'WALKING') return false;
+    const { player } = this;
+    if (alien.x === player.x && alien.y === player.y) return true;
+    return (
+      before.state === 'WALKING' &&
+      alien.x === playerBefore.x &&
+      alien.y === playerBefore.y &&
+      player.x === before.x &&
+      player.y === before.y
+    );
+  }
+
+  /** ミスした瞬間に残機を減らし、MISS に入る（16.5） */
+  private startMiss(): void {
+    this.lives -= 1;
+    this._missElapsedMs = 0;
+    this._state = 'MISS';
+  }
+
+  /** MISS 中はロジックを止め、経過時間だけ数える。1500ms で再開かゲームオーバー（16.5） */
+  private updateMiss(dt: number, events: GameEvent[]): void {
+    this._missElapsedMs += dt;
+    if (this._missElapsedMs < MISS_DURATION_MS) return;
+    if (this.lives > 0) {
+      this.restartLife();
+      this.resetInput(events);
+      this._state = 'PLAYING';
+    } else {
+      this._state = 'GAMEOVER';
+    }
+  }
+
+  /** ゲームオーバーからのリトライ（4章）。ハイスコアは戻さない（16.10） */
+  private retry(events: GameEvent[]): void {
+    this.score = 0;
+    this.lives = INITIAL_LIVES;
+    this.level = 1;
+    this.initLevel();
+    this.resetInput(events);
+    this._state = 'PLAYING';
   }
 
   /** 次の坑道へ（9.3）。スコアと残機は引き継ぐ */
