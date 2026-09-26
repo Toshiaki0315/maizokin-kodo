@@ -1,4 +1,4 @@
-// 描画のまとめ役（仕様 12章・16.4・16.5・16.12・16.15・16.16）。Game の状態を読むだけで、書き換えない。
+// 描画のまとめ役（仕様 12章・16.4・16.5・16.15・16.16）。Game の状態を読むだけで、書き換えない。
 // オブジェクトは作って使い回し、毎フレームは位置・表示・形の更新だけにする（14.3）
 import { Container, Graphics, GraphicsContext, Rectangle } from 'pixi.js';
 import { CRTFilter, GlowFilter, ShockwaveFilter } from 'pixi-filters';
@@ -8,24 +8,20 @@ import {
   BOARD_WIDTH,
   CANVAS_HEIGHT,
   CANVAS_WIDTH,
-  COLS,
-  DIR_VECTORS,
   DISPLAY_SCALE,
   MISS_BLINK_INTERVAL_MS,
   MISS_FLASH_ALPHA,
   MISS_FLASH_MS,
   PORTAL_POS,
-  ROWS,
   STATUS_BAR_HEIGHT,
   TILE_SIZE,
   WALK_ANIM_INTERVAL_MS,
 } from '../core/config';
 import type { Game, GameEvent, Gold } from '../core/game';
-import { PATH, type Grid } from '../core/maze';
+import type { Grid } from '../core/maze';
 import { Particles, Shake } from './effects';
 import {
   GOLD_ROTATION,
-  drawFacingFrame,
   drawHole,
   drawPortal,
   drawWalls,
@@ -57,16 +53,17 @@ export class GameRenderer {
   /** stage に置く。1.5倍で表示する（16.4） */
   readonly view = new Container();
 
-  // 盤面レイヤー（波紋と揺れの対象）。描画順は 12.1 に 16.12 の向きの枠を加えたもの
+  // 盤面レイヤー（波紋と揺れの対象）。描画順は 12.1 に、捕獲中の穴をエイリアンの上に重ねたもの
   private readonly board = new Container();
   private readonly portal = new Graphics();
   private readonly walls = new Graphics();
   private readonly stairs = new Graphics(stairsContext());
   private readonly holes = new Graphics();
   private readonly goldLayer = new Container();
-  private readonly facingFrame = new Graphics();
   private readonly miner = new Graphics();
   private readonly alienLayer = new Container();
+  /** 捕獲中のエイリアンがいるマスの穴。深さが見えるよう、エイリアンの上に重ねる */
+  private readonly trappedHoles = new Graphics();
 
   private readonly particles = new Particles(new Graphics());
   private readonly shake = new Shake();
@@ -102,7 +99,6 @@ export class GameRenderer {
   private goldSource: Gold[] | null = null;
   private goldViews: Graphics[] = [];
   private alienViews: Graphics[] = [];
-  private frameKey = '';
 
   /** パーティクル・揺れ・波紋の時間。PAUSED と QUIT_CONFIRM の間は止める（16.15） */
   private effectTimeMs = 0;
@@ -131,9 +127,9 @@ export class GameRenderer {
       this.stairs,
       this.holes,
       this.goldLayer,
-      this.facingFrame,
       this.miner,
       this.alienLayer,
+      this.trappedHoles,
     );
     // 波紋のフィルターの範囲を盤面（自身の座標で 600×600）に固定し、中心をこの範囲の左上から測れるようにする
     this.board.filterArea = new Rectangle(0, 0, BOARD_WIDTH, BOARD_HEIGHT);
@@ -186,7 +182,6 @@ export class GameRenderer {
     this.stairs.visible = game.stairs !== null;
     this.renderHoles(game);
     this.renderGold(game);
-    this.renderFacingFrame(game);
     this.renderMiner(game, nowMs);
     this.renderAliens(game, nowMs);
 
@@ -229,12 +224,17 @@ export class GameRenderer {
     this.board.filters = [this.shockwave];
   }
 
-  /** 穴（12.5）。捕獲中のエイリアンがいるマスは、絵に穴が含まれるので描かない（16.16） */
+  /**
+   * 穴（12.5）。捕獲中のエイリアンがいるマスも、埋めるたびに小さくなるのが見えるように円を描く。
+   * 深さ1の円はエイリアンの絵に隠れるため、そのマスの円はエイリアンの上の層に描く
+   */
   private renderHoles(game: Game): void {
     const trapped = new Set(game.aliens.filter((a) => a.state === 'TRAPPED').map((a) => `${a.x},${a.y}`));
     this.holes.clear();
+    this.trappedHoles.clear();
     for (const hole of game.holes.entries()) {
-      if (!trapped.has(`${hole.x},${hole.y}`)) drawHole(this.holes, hole.x, hole.y, hole.stage);
+      const layer = trapped.has(`${hole.x},${hole.y}`) ? this.trappedHoles : this.holes;
+      drawHole(layer, hole.x, hole.y, hole.stage);
     }
   }
 
@@ -254,22 +254,6 @@ export class GameRenderer {
     game.gold.forEach((g, i) => {
       this.goldViews[i].visible = !g.collected;
     });
-  }
-
-  /** 前方マスの向きの枠（16.12）。MISS の演出中は出さない。盤面の外なら出さない */
-  private renderFacingFrame(game: Game): void {
-    const { player } = game;
-    const tx = player.x + DIR_VECTORS[player.dir].x;
-    const ty = player.y + DIR_VECTORS[player.dir].y;
-    const inBoard = tx >= 0 && tx < COLS && ty >= 0 && ty < ROWS;
-    this.facingFrame.visible = !game.missInProgress && inBoard;
-    if (!this.facingFrame.visible) return;
-    const isPath = game.grid[ty][tx] === PATH;
-    const key = `${tx},${ty},${isPath}`;
-    if (key !== this.frameKey) {
-      drawFacingFrame(this.facingFrame, tx, ty, isPath);
-      this.frameKey = key;
-    }
   }
 
   /** 坑夫（16.16）。dir だけで絵を決め、左向きは右向きの絵を反転する */
@@ -296,7 +280,7 @@ export class GameRenderer {
     this.miner.visible = !game.missInProgress || Math.floor(game.missElapsedMs / MISS_BLINK_INTERVAL_MS) % 2 === 0;
   }
 
-  /** 坑道の怪（16.16）。WALKING は2枚を交互、TRAPPED は穴の絵、出現待ち・DEAD は描かない */
+  /** 坑道の怪（16.16）。WALKING は2枚を交互、TRAPPED は穴に沈んだ絵、出現待ち・DEAD は描かない */
   private renderAliens(game: Game, nowMs: number): void {
     while (this.alienViews.length < game.aliens.length) {
       const view = new Graphics();

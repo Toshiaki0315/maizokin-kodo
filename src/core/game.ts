@@ -146,7 +146,7 @@ export class Game {
 
   /**
    * ミスの演出中か。MISS から一時停止・終了確認に入っている間も含む。
-   * 坑夫をミスの絵で止め、向きの枠を消すのに使う（16.5・16.12・16.16）
+   * 坑夫をミスの絵で止めるのに使う（16.5・16.16）
    */
   get missInProgress(): boolean {
     const resumesTo = this._state === 'QUIT_CONFIRM' ? this.quitReturn : this._state;

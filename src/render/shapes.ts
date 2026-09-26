@@ -1,4 +1,4 @@
-// 盤面の図形（仕様 12章・16.12・16.16）。座標と色は仕様書の値をそのまま使う。
+// 盤面の図形（仕様 12章・16.16）。座標と色は仕様書の値をそのまま使う。
 // 形の変わらないものは GraphicsContext として一度だけ作り、Graphics で使い回す（14.3）
 import { Graphics, GraphicsContext } from 'pixi.js';
 import { COLS, ROWS, TILE_SIZE } from '../core/config';
@@ -101,32 +101,6 @@ export function goldContext(): GraphicsContext {
     .fill(0xffffff) // 光沢（L字）
     .rect(-8, -2, 2, 6)
     .fill(0xffffff);
-}
-
-// ---- 向きの枠（16.12）：マスの内側4pxに、長さ10・線幅3の L 字を四隅に描く ----
-
-const FRAME_INSET = 4;
-const FRAME_LENGTH = 10;
-
-/** (x, y) のマスに向きの枠を描く。通路なら不透明度0.6、壁なら0.25 */
-export function drawFacingFrame(g: Graphics, x: number, y: number, isPath: boolean): void {
-  g.clear();
-  const left = x * TILE_SIZE + FRAME_INSET;
-  const top = y * TILE_SIZE + FRAME_INSET;
-  const right = (x + 1) * TILE_SIZE - FRAME_INSET;
-  const bottom = (y + 1) * TILE_SIZE - FRAME_INSET;
-  const corners: ReadonlyArray<readonly [number, number, number, number]> = [
-    [left, top, 1, 1],
-    [right, top, -1, 1],
-    [left, bottom, 1, -1],
-    [right, bottom, -1, -1],
-  ];
-  for (const [cx, cy, sx, sy] of corners) {
-    g.moveTo(cx, cy + sy * FRAME_LENGTH)
-      .lineTo(cx, cy)
-      .lineTo(cx + sx * FRAME_LENGTH, cy);
-  }
-  g.stroke({ width: 3, color: 0xffffff, alpha: isPath ? 0.6 : 0.25, cap: 'square', join: 'miter' });
 }
 
 // ---- ドット絵（16.16）：1ドット＝論理2px、マスの左上に合わせる ----
