@@ -91,3 +91,22 @@ describe('エフェクト用イベント（仕様 14.5・16.15）', () => {
     expect(stepN(game, 30, NO_INPUT)).toEqual([]);
   });
 });
+
+describe('レベルクリアのイベント（仕様 14.5・16.18）', () => {
+  it('階段に乗ってクリアしたステップで levelCleared を1回返す', () => {
+    const game = playingGame();
+    for (const g of game.gold) g.collected = true;
+    game.step(FIXED_STEP_MS, NO_INPUT); // 階段が出る
+    game.player.y = 8;
+    const events = game.step(FIXED_STEP_MS, input({ dir: 'UP' }));
+    expect(game.state).toBe('LEVEL_CLEAR');
+    expect(ofType(events, 'levelCleared')).toEqual([{ type: 'levelCleared' }]);
+    expect(ofType(stepN(game, 30), 'levelCleared')).toEqual([]);
+  });
+
+  it('階段が出ていない (7,7) に乗っても返さない', () => {
+    const game = playingGame();
+    game.player.y = 8;
+    expect(ofType(game.step(FIXED_STEP_MS, input({ dir: 'UP' })), 'levelCleared')).toEqual([]);
+  });
+});

@@ -39,6 +39,7 @@ export type GameEvent =
   | { type: 'holeFilled'; x: number; y: number }
   | { type: 'alienKilled'; x: number; y: number; color: string }
   | { type: 'stairsAppeared' }
+  | { type: 'levelCleared' }
   | { type: 'miss' };
 
 export interface Player {
@@ -294,6 +295,7 @@ export class Game {
     if (this.stairs !== null && this.player.x === this.stairs.x && this.player.y === this.stairs.y) {
       this._state = 'LEVEL_CLEAR';
       this.score += SCORE_LEVEL_CLEAR;
+      events.push({ type: 'levelCleared' });
       this.saveHiScoreIfNeeded(events);
     }
   }
