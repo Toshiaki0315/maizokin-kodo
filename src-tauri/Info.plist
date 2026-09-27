@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Tauri が作る Info.plist に合流させる設定（仕様 16.9）。
+  Mac の言語に合わせてアプリの表示名を切り替える（日本語は「埋蔵金坑道」、それ以外は「MaizokinKodo」）。
+  表示名そのものは localization/*.lproj/InfoPlist.strings に書き、tauri.conf.json の bundle.macOS.files でアプリに入れる
+-->
+<plist version="1.0">
+<dict>
+  <key>CFBundleDevelopmentRegion</key>
+  <string>en</string>
+  <key>CFBundleLocalizations</key>
+  <array>
+    <string>en</string>
+    <string>ja</string>
+  </array>
+  <key>LSHasLocalizedDisplayName</key>
+  <true/>
+</dict>
+</plist>

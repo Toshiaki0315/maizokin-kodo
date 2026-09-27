@@ -792,7 +792,7 @@ PAUSED と QUIT\_CONFIRM のオーバーレイは4章と同じ書式（全画面
 ```jsonc
 // src-tauri/tauri.conf.json（抜粋）
 {
-  "productName": "Buried Treasure Tunnel",
+  "productName": "MaizokinKodo",
   "version": "../package.json",
   "identifier": "io.github.toshiaki0315.buriedtreasuretunnel",
   "app": {
@@ -811,7 +811,14 @@ PAUSED と QUIT\_CONFIRM のオーバーレイは4章と同じ書式（全画面
     "active": true,
     "targets": ["dmg"],
     "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns"],
-    "macOS": { "minimumSystemVersion": "26.0" }
+    "macOS": {
+      "minimumSystemVersion": "26.0",
+      // Mac の言語に合わせた表示名（下記）。Contents からの配置先 → src-tauri からの元ファイル
+      "files": {
+        "Resources/ja.lproj/InfoPlist.strings": "localization/ja.lproj/InfoPlist.strings",
+        "Resources/en.lproj/InfoPlist.strings": "localization/en.lproj/InfoPlist.strings"
+      }
+    }
   }
 }
 ```
@@ -825,7 +832,11 @@ PAUSED と QUIT\_CONFIRM のオーバーレイは4章と同じ書式（全画面
 }
 ```
 
-- 英語名（`productName`）は日本語名の直訳で「Buried Treasure Tunnel」。dmg やアプリのファイル名に使われる。ウィンドウのタイトルは日本語の「埋蔵金坑道」のまま
+- 英語名（`productName`）は日本語名をローマ字にした「MaizokinKodo」。dmg やアプリのファイル名に使われる（`MaizokinKodo.app`、`MaizokinKodo_<版>_aarch64.dmg`）。ウィンドウのタイトルは日本語の「埋蔵金坑道」のまま
+- **アプリの表示名は Mac の言語で切り替える**：日本語の Mac では Finder・Dock・メニューバーに「埋蔵金坑道」、それ以外の言語では「MaizokinKodo」と表示する（2026年9月27日追加）
+  - 表示名は `src-tauri/localization/ja.lproj/InfoPlist.strings`・`en.lproj/InfoPlist.strings` の `CFBundleDisplayName`・`CFBundleName` に書き、上の `bundle.macOS.files` でアプリの `Contents/Resources/` に入れる
+  - `src-tauri/Info.plist`（Tauri が自動で合流させる）に `CFBundleLocalizations`（en・ja）、`CFBundleDevelopmentRegion`（en）、`LSHasLocalizedDisplayName`（true）を書く
+  - アプリのファイル名自体は英語名のまま。Finder は表示名で見せる
 - バンドル識別子（`identifier`）は `io.github.toshiaki0315.buriedtreasuretunnel`。ハイスコアの保存場所がこの識別子で決まるため、リリース後は変更しない
 - アイコンのファイルは 16.11 の原本から `tauri icon` コマンドで生成する
 
@@ -1570,7 +1581,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: 'Buried Treasure Tunnel ${{ github.ref_name }}'
+          releaseName: 'MaizokinKodo ${{ github.ref_name }}'
           releaseBody: 'インストール手順と Gatekeeper の許可方法は README を参照してください。'
           releaseDraft: true
 ```

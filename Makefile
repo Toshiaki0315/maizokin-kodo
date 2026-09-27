@@ -1,7 +1,7 @@
 # 埋蔵金坑道のビルド用コマンド（仕様 17.4）。中身は npm と Tauri CLI を呼ぶだけ。
 # 使い方は `make` または `make help` で表示する。
 
-APP_NAME   := Buried Treasure Tunnel
+APP_NAME   := MaizokinKodo
 BUNDLE_DIR := src-tauri/target/release/bundle
 ICON_SVG   := src-tauri/icons/source/app-icon.svg
 ICON_PNG   := src-tauri/icons/source/app-icon.png
