@@ -1,41 +1,8 @@
 // 効果音と BGM（仕様 16.18）。音声ファイルは使わず、Web Audio でその場で合成する。
-// BGM はこのゲームのために作ったオリジナル曲（イ短調、16小節のループ）
+// 曲はこのゲームのために作ったオリジナル曲。プレイ中の BGM（イ短調、16小節）と、ゲームオーバーの曲（4小節）の2つ
 import type { GameEvent, GameState } from './core/game';
 
 // ---- 曲（16.18） ----
-
-/** テンポ（1分あたりの4分音符の数）。1ステップ＝8分音符 */
-const TEMPO_BPM = 150;
-const STEP_SECONDS = 60 / TEMPO_BPM / 2;
-
-/**
- * メロディ。1小節＝8分音符8つ。音名は「音＋オクターブ」、"-" は前の音を伸ばす、"." は休み。
- * Am・F・G・E の進行を2周し、2周目は高い音域で盛り上げる
- */
-const MELODY: readonly string[] = [
-  'A4 . C5 . E5 - D5 C5',
-  'B4 . A4 . E4 - - .',
-  'F4 . A4 . C5 - B4 A4',
-  'G4 . F4 . C4 - - .',
-  'G4 . B4 . D5 - C5 B4',
-  'A4 . G4 . D4 - - .',
-  'E4 . G#4 . B4 - A4 G#4',
-  'B4 - - - . . . .',
-  'A4 C5 E5 A5 G5 - E5 .',
-  'F5 E5 D5 C5 E5 - - .',
-  'F5 . E5 . D5 . C5 .',
-  'A4 - C5 - F5 - - .',
-  'D5 . F5 . A5 - G5 F5',
-  'E5 . D5 . A4 - - .',
-  'G#4 . B4 . E5 - D5 B4',
-  'E5 - - - . . . .',
-];
-
-/** 小節ごとのベースの根音。8分音符で根音とオクターブ上を交互に鳴らす */
-const BASS_ROOTS: readonly string[] = [
-  'A2', 'A2', 'F2', 'F2', 'G2', 'G2', 'E2', 'E2',
-  'A2', 'A2', 'F2', 'F2', 'D2', 'D2', 'E2', 'E2',
-];
 
 const NOTE_OFFSETS: Readonly<Record<string, number>> = {
   C: 0, 'C#': 1, D: 2, 'D#': 3, E: 4, F: 5, 'F#': 6, G: 7, 'G#': 8, A: 9, 'A#': 10, B: 11,
@@ -56,9 +23,12 @@ interface ScheduledNote {
   hz: number;
 }
 
-/** メロディを「どのステップで、何ステップ伸ばして、何の音か」の列にする */
-function parseMelody(): ScheduledNote[] {
-  const tokens = MELODY.flatMap((bar) => bar.split(' '));
+/**
+ * メロディを「どのステップで、何ステップ伸ばして、何の音か」の列にする。
+ * 1小節＝8分音符8つ（1ステップ＝8分音符）。音名は「音＋オクターブ」、"-" は前の音を伸ばす、"." は休み
+ */
+function parseMelody(bars: readonly string[]): ScheduledNote[] {
+  const tokens = bars.flatMap((bar) => bar.split(' '));
   const notes: ScheduledNote[] = [];
   tokens.forEach((token, step) => {
     if (token === '-' || token === '.') return;
@@ -69,7 +39,80 @@ function parseMelody(): ScheduledNote[] {
   return notes;
 }
 
-const LOOP_STEPS = MELODY.length * 8;
+interface TrackDefinition {
+  /** テンポ（1分あたりの4分音符の数） */
+  tempoBpm: number;
+  melody: readonly string[];
+  /** メロディの音色と音量 */
+  lead: OscillatorType;
+  leadVolume: number;
+  /** 小節ごとのベースの根音 */
+  bassRoots: readonly string[];
+  /** ベースを何ステップごとに鳴らすか（1＝8分音符、4＝2分音符） */
+  bassEvery: number;
+  /** ベースを根音とオクターブ上で交互に鳴らすか */
+  bassOctaves: boolean;
+  /** 裏拍に軽いハイハットを入れるか */
+  hiHat: boolean;
+}
+
+/** プレイ中の BGM。Am・F・G・E の進行を2周し、2周目は高い音域で盛り上げる */
+const MAIN_THEME: TrackDefinition = {
+  tempoBpm: 150,
+  melody: [
+    'A4 . C5 . E5 - D5 C5',
+    'B4 . A4 . E4 - - .',
+    'F4 . A4 . C5 - B4 A4',
+    'G4 . F4 . C4 - - .',
+    'G4 . B4 . D5 - C5 B4',
+    'A4 . G4 . D4 - - .',
+    'E4 . G#4 . B4 - A4 G#4',
+    'B4 - - - . . . .',
+    'A4 C5 E5 A5 G5 - E5 .',
+    'F5 E5 D5 C5 E5 - - .',
+    'F5 . E5 . D5 . C5 .',
+    'A4 - C5 - F5 - - .',
+    'D5 . F5 . A5 - G5 F5',
+    'E5 . D5 . A4 - - .',
+    'G#4 . B4 . E5 - D5 B4',
+    'E5 - - - . . . .',
+  ],
+  lead: 'square',
+  leadVolume: 0.5,
+  bassRoots: ['A2', 'A2', 'F2', 'F2', 'G2', 'G2', 'E2', 'E2', 'A2', 'A2', 'F2', 'F2', 'D2', 'D2', 'E2', 'E2'],
+  bassEvery: 1,
+  bassOctaves: true,
+  hiHat: true,
+};
+
+/** ゲームオーバーの曲。ゆっくりした4小節（Am・F・Dm・E）で、少しさみしげに下りていく */
+const GAME_OVER_THEME: TrackDefinition = {
+  tempoBpm: 84,
+  melody: ['E5 - D5 - C5 - B4 -', 'A4 - - - C5 - B4 A4', 'F4 - A4 - G4 - F4 -', 'E4 - - - G#4 - - -'],
+  lead: 'triangle',
+  leadVolume: 0.9,
+  bassRoots: ['A2', 'F2', 'D2', 'E2'],
+  bassEvery: 4,
+  bassOctaves: false,
+  hiHat: false,
+};
+
+interface Track extends TrackDefinition {
+  stepSeconds: number;
+  notes: ScheduledNote[];
+  loopSteps: number;
+}
+
+function buildTrack(definition: TrackDefinition): Track {
+  return {
+    ...definition,
+    stepSeconds: 60 / definition.tempoBpm / 2,
+    notes: parseMelody(definition.melody),
+    loopSteps: definition.melody.length * 8,
+  };
+}
+
+type TrackName = 'main' | 'gameOver';
 
 // ---- 音量 ----
 
@@ -85,11 +128,17 @@ export class Sound {
   private readonly master: GainNode;
   private readonly music: GainNode;
   private readonly effects: GainNode;
-  private readonly melody = parseMelody();
+  private readonly tracks: Readonly<Record<TrackName, Track>> = {
+    main: buildTrack(MAIN_THEME),
+    gameOver: buildTrack(GAME_OVER_THEME),
+  };
   private readonly noise: AudioBuffer;
 
-  private musicPlaying = false;
-  /** 次に予約するステップと、その時刻。止めて再開したら続きから鳴らす */
+  /** 鳴らしている曲。止めているときは null */
+  private current: TrackName | null = null;
+  /** プレイ中の BGM を止めた位置。再開したら続きから鳴らす */
+  private mainResumeStep = 0;
+  /** 次に予約するステップと、その時刻 */
   private nextStep = 0;
   private nextTime = 0;
   private timer: ReturnType<typeof setInterval> | null = null;
@@ -155,45 +204,67 @@ export class Sound {
     }
   }
 
-  /** BGM はプレイ中だけ鳴らす。それ以外では止め、再開したら続きから鳴らす */
+  /**
+   * 状態に合わせて曲を切り替える。プレイ中は BGM（止めた位置の続きから）、
+   * ゲームオーバーの間はゲームオーバーの曲（毎回頭から）を繰り返し鳴らし、それ以外では止める
+   */
   updateMusic(state: GameState): void {
-    const shouldPlay = state === 'PLAYING';
-    if (shouldPlay === this.musicPlaying) return;
-    this.musicPlaying = shouldPlay;
+    const wanted: TrackName | null = state === 'PLAYING' ? 'main' : state === 'GAMEOVER' ? 'gameOver' : null;
+    if (wanted === this.current) return;
+    this.stopMusic();
+    if (wanted !== null) this.startMusic(wanted);
+  }
+
+  private startMusic(name: TrackName): void {
     const now = this.ctx.currentTime;
-    if (shouldPlay) {
-      this.nextTime = now + 0.05;
-      this.music.gain.cancelScheduledValues(now);
-      this.music.gain.setValueAtTime(MUSIC_VOLUME, now);
-      this.timer = setInterval(() => this.scheduleMusic(), SCHEDULER_INTERVAL_MS);
-      this.scheduleMusic();
-    } else {
-      if (this.timer !== null) clearInterval(this.timer);
-      this.timer = null;
-      // 先読みで予約済みの音が鳴らないよう、すぐに音量を下げる
-      this.music.gain.cancelScheduledValues(now);
-      this.music.gain.setTargetAtTime(0, now, 0.01);
-    }
+    this.current = name;
+    this.nextStep = name === 'main' ? this.mainResumeStep : 0;
+    // 止めた直後の曲の予約（先読み分）と重ならないよう、少し間を空けて始める
+    this.nextTime = now + SCHEDULE_AHEAD + 0.03;
+    this.music.gain.cancelScheduledValues(now);
+    this.music.gain.setValueAtTime(0, now);
+    this.music.gain.setValueAtTime(MUSIC_VOLUME, this.nextTime - 0.01);
+    this.timer = setInterval(() => this.scheduleMusic(), SCHEDULER_INTERVAL_MS);
+    this.scheduleMusic();
+  }
+
+  private stopMusic(): void {
+    if (this.current === null) return;
+    if (this.current === 'main') this.mainResumeStep = this.nextStep;
+    this.current = null;
+    if (this.timer !== null) clearInterval(this.timer);
+    this.timer = null;
+    // 先読みで予約済みの音が鳴らないよう、すぐに音量を下げる
+    const now = this.ctx.currentTime;
+    this.music.gain.cancelScheduledValues(now);
+    this.music.gain.setTargetAtTime(0, now, 0.01);
   }
 
   /** 少し先までの音を予約する */
   private scheduleMusic(): void {
+    if (this.current === null) return;
+    const track = this.tracks[this.current];
     while (this.nextTime < this.ctx.currentTime + SCHEDULE_AHEAD) {
-      this.scheduleStep(this.nextStep, this.nextTime);
-      this.nextStep = (this.nextStep + 1) % LOOP_STEPS;
-      this.nextTime += STEP_SECONDS;
+      this.scheduleStep(track, this.nextStep, this.nextTime);
+      this.nextStep = (this.nextStep + 1) % track.loopSteps;
+      this.nextTime += track.stepSeconds;
     }
   }
 
-  private scheduleStep(step: number, time: number): void {
-    for (const note of this.melody) {
-      if (note.step === step) this.tone('square', note.hz, time, note.length * STEP_SECONDS * 0.9, 0.5, this.music);
+  private scheduleStep(track: Track, step: number, time: number): void {
+    for (const note of track.notes) {
+      if (note.step === step) {
+        this.tone(track.lead, note.hz, time, note.length * track.stepSeconds * 0.9, track.leadVolume, this.music);
+      }
     }
-    const bar = Math.floor(step / 8);
-    const bassHz = frequency(BASS_ROOTS[bar]) * (step % 2 === 0 ? 1 : 2);
-    this.tone('triangle', bassHz, time, STEP_SECONDS * 0.8, 0.9, this.music);
+    if (step % track.bassEvery === 0) {
+      const bar = Math.floor(step / 8);
+      const octave = track.bassOctaves && step % 2 === 1 ? 2 : 1;
+      const length = track.stepSeconds * track.bassEvery * 0.8;
+      this.tone('triangle', frequency(track.bassRoots[bar]) * octave, time, length, 0.9, this.music);
+    }
     // 裏拍に軽いハイハット
-    if (step % 2 === 1) this.noiseBurst(time, 0.03, 8000, 'highpass', 0.15, this.music);
+    if (track.hiHat && step % 2 === 1) this.noiseBurst(time, 0.03, 8000, 'highpass', 0.15, this.music);
   }
 
   /** 掘る音：低めのノイズの「ザッ」 */
