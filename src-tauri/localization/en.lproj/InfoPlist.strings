@@ -1,0 +1,3 @@
+/* Mac の言語が日本語以外のときのアプリの表示名（仕様 16.9） */
+CFBundleDisplayName = "MaizokinKodo";
+CFBundleName = "MaizokinKodo";

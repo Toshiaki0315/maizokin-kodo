@@ -1,0 +1,3 @@
+/* Mac の言語が日本語のときのアプリの表示名（仕様 16.9） */
+CFBundleDisplayName = "埋蔵金坑道";
+CFBundleName = "埋蔵金坑道";

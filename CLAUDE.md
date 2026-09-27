@@ -1,4 +1,4 @@
-# CLAUDE.md — 埋蔵金坑道（Buried Treasure Tunnel）
+# CLAUDE.md — 埋蔵金坑道（MaizokinKodo）
 
 このリポジトリで作業する AI コーディングエージェント向けのルールです。作業を始める前に必ず読んでください。
 
